@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.routers.health import router as health_router
 from app.routers.analyze import router as analyze_router
 from app.routers.webhook import router as webhook_router
@@ -7,7 +8,9 @@ from app.routers.repositories import router as repositories_router
 from app.routers.learning_items import router as learning_items_router
 from app.routers.pull_requests import router as pull_requests_router
 from app.routers.weekly_digests import router as weekly_digests_router
+from app.routers.auth import router as auth_router
 from app.db.session import init_db
+from app.config import settings
 
 
 @asynccontextmanager
@@ -18,6 +21,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="週報AI API", version="0.1.0", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(analyze_router)
 app.include_router(webhook_router)

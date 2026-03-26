@@ -5,8 +5,9 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
 from app.db.session import get_db
-from app.db.models import WeeklyDigest
+from app.db.models import WeeklyDigest, User
 from app.config import settings
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/weekly-digests", tags=["weekly-digests"])
 
@@ -31,7 +32,10 @@ class GenerateRequest(BaseModel):
 
 
 @router.get("/", response_model=list[WeeklyDigestResponse])
-async def list_weekly_digests(db: AsyncSession = Depends(get_db)):
+async def list_weekly_digests(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
         select(WeeklyDigest).order_by(WeeklyDigest.year.desc(), WeeklyDigest.week.desc())
     )
@@ -39,7 +43,11 @@ async def list_weekly_digests(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{digest_id}", response_model=WeeklyDigestResponse)
-async def get_weekly_digest(digest_id: int, db: AsyncSession = Depends(get_db)):
+async def get_weekly_digest(
+    digest_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     digest = await db.get(WeeklyDigest, digest_id)
     if not digest:
         raise HTTPException(status_code=404, detail="Weekly digest not found")
@@ -50,6 +58,7 @@ async def get_weekly_digest(digest_id: int, db: AsyncSession = Depends(get_db)):
 async def generate_digest(
     request: GenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """指定週（省略時は今週）の週報を生成する"""
     today = date.today()

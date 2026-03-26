@@ -4,7 +4,8 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
 from app.db.session import get_db
-from app.db.models import LearningItem
+from app.db.models import LearningItem, PullRequest, Repository, User
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/learning-items", tags=["learning-items"])
 
@@ -27,8 +28,15 @@ class LearningItemResponse(BaseModel):
 async def list_learning_items(
     category: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    stmt = select(LearningItem).order_by(LearningItem.created_at.desc())
+    stmt = (
+        select(LearningItem)
+        .join(PullRequest, LearningItem.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(Repository.user_id == current_user.id)
+        .order_by(LearningItem.created_at.desc())
+    )
     if category:
         stmt = stmt.where(LearningItem.category == category)
     result = await db.execute(stmt)
@@ -36,7 +44,11 @@ async def list_learning_items(
 
 
 @router.get("/{item_id}", response_model=LearningItemResponse)
-async def get_learning_item(item_id: int, db: AsyncSession = Depends(get_db)):
+async def get_learning_item(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     item = await db.get(LearningItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Learning item not found")

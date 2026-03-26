@@ -4,8 +4,9 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
 from app.db.session import get_db
-from app.db.models import PullRequest, LearningItem
+from app.db.models import PullRequest, LearningItem, User
 from app.config import settings
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/pull-requests", tags=["pull-requests"])
 
@@ -38,7 +39,11 @@ class PullRequestDetail(BaseModel):
 
 
 @router.get("/{pr_id}", response_model=PullRequestDetail)
-async def get_pull_request(pr_id: int, db: AsyncSession = Depends(get_db)):
+async def get_pull_request(
+    pr_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from sqlalchemy.orm import selectinload
     pr = await db.scalar(
         select(PullRequest)
@@ -55,6 +60,7 @@ async def reanalyze_pull_request(
     pr_id: int,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """保存済みPRを再分析して learning_items を再生成する"""
     pr = await db.get(PullRequest, pr_id)

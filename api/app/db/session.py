@@ -19,5 +19,7 @@ async def get_db():
 
 
 async def init_db():
+    # 本番では alembic upgrade head で管理する
+    # 開発/テスト用: モデルからテーブルを自動生成
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

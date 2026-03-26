@@ -1,7 +1,10 @@
 import hashlib
 import hmac
+import logging
 from fastapi import HTTPException, Request
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def verify_signature(request: Request) -> bytes:
@@ -10,7 +13,13 @@ async def verify_signature(request: Request) -> bytes:
     sig_header = request.headers.get("X-Hub-Signature-256", "")
 
     if not settings.github_webhook_secret:
-        return body  # 開発時はスキップ可
+        if settings.app_env == "development":
+            logger.warning("Webhook signature verification skipped (development mode)")
+            return body
+        raise HTTPException(
+            status_code=500,
+            detail="Webhook secret not configured",
+        )
 
     expected = "sha256=" + hmac.new(
         settings.github_webhook_secret.encode(),

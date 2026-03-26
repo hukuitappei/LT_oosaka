@@ -4,7 +4,8 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
 from app.db.session import get_db
-from app.db.models import Repository, PullRequest
+from app.db.models import Repository, PullRequest, User
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -34,15 +35,26 @@ class PullRequestResponse(BaseModel):
 
 
 @router.get("/", response_model=list[RepositoryResponse])
-async def list_repositories(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Repository).order_by(Repository.created_at.desc()))
+async def list_repositories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Repository)
+        .where(Repository.user_id == current_user.id)
+        .order_by(Repository.created_at.desc())
+    )
     return result.scalars().all()
 
 
 @router.get("/{repo_id}/pull-requests", response_model=list[PullRequestResponse])
-async def list_pull_requests(repo_id: int, db: AsyncSession = Depends(get_db)):
+async def list_pull_requests(
+    repo_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     repo = await db.get(Repository, repo_id)
-    if not repo:
+    if not repo or repo.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Repository not found")
     result = await db.execute(
         select(PullRequest)
