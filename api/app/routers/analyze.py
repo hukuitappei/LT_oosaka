@@ -1,23 +1,29 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.llm_output import LLMOutputV1
 from app.services.extractor import extract_from_pr, load_fixture
+from app.services.learning_saver import save_learning_items
 from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.ollama_provider import OllamaProvider
 from app.config import settings
+from app.db.session import get_db
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
 
 class AnalyzeRequest(BaseModel):
     pr_id: str
-    provider: str = "anthropic"  # "anthropic" or "ollama"
+    provider: str = "anthropic"
+    pull_request_id: int | None = None  # 指定時はDBに保存
 
 
 @router.post("/pr", response_model=LLMOutputV1)
-async def analyze_pr(request: AnalyzeRequest):
-    """サンプルPRから学びを抽出する"""
+async def analyze_pr(
+    request: AnalyzeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """サンプルPRから学びを抽出する。pull_request_id を指定するとDBに保存される。"""
     try:
         pr_data = load_fixture(request.pr_id)
     except FileNotFoundError:
@@ -34,9 +40,13 @@ async def analyze_pr(request: AnalyzeRequest):
 
     try:
         result = await extract_from_pr(pr_data, provider)
-        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    if request.pull_request_id is not None:
+        await save_learning_items(result, request.pull_request_id, db)
+
+    return result
 
 
 @router.get("/fixtures")
