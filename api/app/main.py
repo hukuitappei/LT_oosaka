@@ -6,6 +6,7 @@ from app.routers.webhook import router as webhook_router
 from app.routers.repositories import router as repositories_router
 from app.routers.learning_items import router as learning_items_router
 from app.routers.pull_requests import router as pull_requests_router
+from app.routers.weekly_digests import router as weekly_digests_router
 from app.db.session import init_db
 
 
@@ -23,6 +24,7 @@ app.include_router(webhook_router)
 app.include_router(repositories_router)
 app.include_router(learning_items_router)
 app.include_router(pull_requests_router)
+app.include_router(weekly_digests_router)
 
 
 @app.get("/")
