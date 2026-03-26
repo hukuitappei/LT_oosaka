@@ -1,0 +1,38 @@
+{
+  "pr_id": "sample-002",
+  "title": "Add order history list endpoint",
+  "description": "注文履歴一覧APIを実装しました。ユーザーごとの注文と、各注文に紐づく商品名も返します。",
+  "base_branch": "main",
+  "head_branch": "feature/order-history",
+  "diff_summary": "api/routers/orders.py に GET /orders/ エンドポイントを追加。for ループ内で orders を取得し、各 order に対して items を別クエリで取得している。",
+  "files_changed": ["api/routers/orders.py", "api/schemas/order.py"],
+  "review_comments": [
+    {
+      "id": "c1",
+      "author": "tech_lead",
+      "body": "N+1 クエリになっています。`for order in orders` の中で毎回 `db.query(Item).filter(...)` を呼ぶと、注文数 N に対して N+1 回 DB アクセスが発生します。SQLAlchemy の `joinedload` か `selectinload` を使って一括で取得してください。",
+      "file": "api/routers/orders.py",
+      "line": 34,
+      "diff_hunk": "+    for order in orders:\n+        items = db.query(Item).filter(Item.order_id == order.id).all()",
+      "resolved": true
+    },
+    {
+      "id": "c2",
+      "author": "tech_lead",
+      "body": "ページネーションがありません。注文が1万件あるユーザーがいたら全件返してしまいます。`limit` と `offset` パラメータを追加してください。デフォルトは `limit=20` くらいで。",
+      "file": "api/routers/orders.py",
+      "line": 28,
+      "diff_hunk": "+async def list_orders(user_id: int, db: Session = Depends(get_db)):",
+      "resolved": true
+    },
+    {
+      "id": "c3",
+      "author": "reviewer_b",
+      "body": "スキーマの `OrderResponse` で `items` フィールドが `Optional` になっていますが、空リストとの使い分けが曖昧です。「商品がない注文」は存在しないビジネスルールなら `list[ItemSchema]` で統一したほうがクライアント側が扱いやすいです。",
+      "file": "api/schemas/order.py",
+      "line": 12,
+      "diff_hunk": "+    items: Optional[list[ItemSchema]] = None",
+      "resolved": false
+    }
+  ]
+}

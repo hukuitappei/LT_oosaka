@@ -1,0 +1,39 @@
+{
+  "pr_id": "sample-001",
+  "title": "Add user search endpoint",
+  "description": "ユーザー検索APIを追加しました。名前で部分一致検索できます。",
+  "base_branch": "main",
+  "head_branch": "feature/user-search",
+  "diff_summary": "api/routers/users.py に GET /users/search?q= エンドポイントを追加。SQLAlchemyを使わず直接SQLを組み立てて実行している。",
+  "files_changed": ["api/routers/users.py"],
+  "review_comments": [
+    {
+      "id": "c1",
+      "author": "senior_dev",
+      "body": "ここ SQL インジェクションの脆弱性があります。`f\"SELECT * FROM users WHERE name LIKE '%{q}%'\"` のように直接文字列を埋め込むのは危険です。SQLAlchemy の ORM か、少なくともパラメータバインディング（`:param` 形式）を使ってください。",
+      "file": "api/routers/users.py",
+      "line": 23,
+      "diff_hunk": "+    result = db.execute(f\"SELECT * FROM users WHERE name LIKE '%{q}%'\")",
+      "resolved": true
+    },
+    {
+      "id": "c2",
+      "author": "senior_dev",
+      "body": "修正ありがとうございます。パラメータバインディングに直ってますね。ついでに `ILIKE` にすると大文字小文字を区別しない検索になりますが、今回は LIKE のままでも OK です。",
+      "file": "api/routers/users.py",
+      "line": 23,
+      "diff_hunk": "+    result = db.execute(\"SELECT * FROM users WHERE name LIKE :q\", {\"q\": f\"%{q}%\"})",
+      "resolved": true,
+      "is_reply": true
+    },
+    {
+      "id": "c3",
+      "author": "senior_dev",
+      "body": "検索クエリが空文字の場合のハンドリングがありません。`q=` で全件返ってしまいます。最低限 `if not q: raise HTTPException(400)` か、空の場合は空リストを返す処理を入れてください。",
+      "file": "api/routers/users.py",
+      "line": 18,
+      "diff_hunk": "+async def search_users(q: str, db: Session = Depends(get_db)):",
+      "resolved": true
+    }
+  ]
+}
