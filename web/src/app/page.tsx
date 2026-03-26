@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { getRequestContextHeaders } from "@/lib/request-context";
 
 const CATEGORY_LABELS: Record<string, string> = {
   security: "セキュリティ",
@@ -11,9 +12,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default async function Home() {
+  const requestHeaders = await getRequestContextHeaders()
   const [items, digests] = await Promise.all([
-    api.getLearningItems(),
-    api.getWeeklyDigests(),
+    api.getLearningItems({ headers: requestHeaders }),
+    api.getWeeklyDigests({ headers: requestHeaders }),
   ]);
 
   const latestDigest = digests?.[0] ?? null;

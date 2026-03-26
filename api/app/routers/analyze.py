@@ -4,8 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.llm_output import LLMOutputV1
 from app.services.extractor import extract_from_pr, load_fixture
 from app.services.learning_saver import save_learning_items
-from app.llm.anthropic_provider import AnthropicProvider
-from app.llm.ollama_provider import OllamaProvider
 from app.config import settings
 from app.db.session import get_db
 
@@ -32,8 +30,10 @@ async def analyze_pr(
     if request.provider == "anthropic":
         if not settings.anthropic_api_key:
             raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY not configured")
+        from app.llm.anthropic_provider import AnthropicProvider
         provider = AnthropicProvider(api_key=settings.anthropic_api_key)
     elif request.provider == "ollama":
+        from app.llm.ollama_provider import OllamaProvider
         provider = OllamaProvider(host=settings.ollama_base_url)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {request.provider}")

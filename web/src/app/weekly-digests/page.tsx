@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { getRequestContextHeaders } from "@/lib/request-context";
 
 export default async function WeeklyDigestsPage() {
-  const digests = await api.getWeeklyDigests();
+  const requestHeaders = await getRequestContextHeaders()
+  const digests = await api.getWeeklyDigests({ headers: requestHeaders });
 
   return (
     <main className="min-h-screen p-8 max-w-3xl mx-auto">

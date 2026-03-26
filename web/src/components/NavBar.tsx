@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
-import { removeToken, isAuthenticated } from "@/lib/auth"
+import { isAuthenticated, removeToken, removeWorkspaceId } from "@/lib/auth"
 import { useEffect, useState } from "react"
 
 export default function NavBar() {
@@ -18,6 +18,7 @@ export default function NavBar() {
 
   function handleLogout() {
     removeToken()
+    removeWorkspaceId()
     router.push("/login")
   }
 

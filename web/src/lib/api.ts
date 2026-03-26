@@ -1,3 +1,5 @@
+import { getClientRequestHeaders, getToken } from "@/lib/auth"
+
 const API_URL = process.env.API_URL || "http://localhost:8000"
 
 export interface LearningItem {
@@ -9,11 +11,13 @@ export interface LearningItem {
   confidence: number
   action_for_next_time: string
   evidence: string
+  visibility: string
   created_at: string
 }
 
 export interface WeeklyDigest {
   id: number
+  workspace_id: number
   year: number
   week: number
   summary: string
@@ -21,6 +25,7 @@ export interface WeeklyDigest {
   next_time_notes: string[]
   pr_count: number
   learning_count: number
+  visibility: string
   created_at: string
 }
 
@@ -35,19 +40,56 @@ export interface Repository {
 export interface TokenResponse {
   access_token: string
   token_type: string
+  default_workspace_id: number
 }
 
-// クッキーからトークンを取得（Server Component 向け）
-function getTokenFromCookie(): string | null {
-  if (typeof document === "undefined") return null
-  const match = document.cookie.match(/(?:^|;\s*)token=([^;]*)/)
-  return match ? match[1] : null
+export interface ApiFetchOptions {
+  token?: string
+  headers?: HeadersInit
 }
 
-async function apiFetch<T>(path: string, token?: string): Promise<T | null> {
-  const headers: Record<string, string> = {}
-  const t = token ?? getTokenFromCookie()
-  if (t) headers["Authorization"] = `Bearer ${t}`
+function toHeaders(input?: HeadersInit): Headers {
+  const headers = new Headers()
+
+  if (!input) return headers
+
+  if (input instanceof Headers) {
+    input.forEach((value, key) => {
+      headers.set(key, value)
+    })
+    return headers
+  }
+
+  if (Array.isArray(input)) {
+    for (const [key, value] of input) {
+      headers.set(key, value)
+    }
+    return headers
+  }
+
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "string") {
+      headers.set(key, value)
+    }
+  }
+
+  return headers
+}
+
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
+  const headers = toHeaders(options.headers)
+  const token = options.token ?? getToken()
+  const clientHeaders = getClientRequestHeaders()
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
+  } else if (clientHeaders.Authorization) {
+    headers.set("Authorization", clientHeaders.Authorization)
+  }
+
+  if (!headers.has("X-Workspace-Id") && clientHeaders["X-Workspace-Id"]) {
+    headers.set("X-Workspace-Id", clientHeaders["X-Workspace-Id"])
+  }
 
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -89,9 +131,12 @@ export async function register(email: string, password: string): Promise<TokenRe
 }
 
 export const api = {
-  getLearningItems: (token?: string) => apiFetch<LearningItem[]>("/learning-items/", token),
-  getWeeklyDigests: (token?: string) => apiFetch<WeeklyDigest[]>("/weekly-digests/", token),
-  getWeeklyDigest: (id: number, token?: string) =>
-    apiFetch<WeeklyDigest>(`/weekly-digests/${id}`, token),
-  getRepositories: (token?: string) => apiFetch<Repository[]>("/repositories/", token),
+  getLearningItems: (options?: ApiFetchOptions) =>
+    apiFetch<LearningItem[]>("/learning-items/", options),
+  getWeeklyDigests: (options?: ApiFetchOptions) =>
+    apiFetch<WeeklyDigest[]>("/weekly-digests/", options),
+  getWeeklyDigest: (id: number, options?: ApiFetchOptions) =>
+    apiFetch<WeeklyDigest>(`/weekly-digests/${id}`, options),
+  getRepositories: (options?: ApiFetchOptions) =>
+    apiFetch<Repository[]>("/repositories/", options),
 }

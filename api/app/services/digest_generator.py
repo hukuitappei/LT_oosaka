@@ -1,10 +1,14 @@
+from __future__ import annotations
+
+import json
 import logging
 from datetime import date, timedelta
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from app.db.models import LearningItem, PullRequest, WeeklyDigest
+
+from app.db.models import LearningItem, WeeklyDigest
 from app.llm.base import BaseLLMProvider
-from app.schemas.llm_output import LLMOutputV1
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +25,6 @@ DIGEST_SYSTEM_PROMPT = """あなたはソフトウェアエンジニアの週次
 
 
 def _get_week_range(year: int, week: int) -> tuple[date, date]:
-    """ISO週番号から月曜〜日曜の範囲を返す"""
     jan4 = date(year, 1, 4)
     week_start = jan4 + timedelta(weeks=week - 1) - timedelta(days=jan4.weekday())
     week_end = week_start + timedelta(days=6)
@@ -29,15 +32,19 @@ def _get_week_range(year: int, week: int) -> tuple[date, date]:
 
 
 async def fetch_learning_items_for_week(
-    year: int, week: int, db: AsyncSession
+    year: int,
+    week: int,
+    workspace_id: int,
+    db: AsyncSession,
 ) -> list[LearningItem]:
-    """指定週の learning_items を取得する"""
     week_start, week_end = _get_week_range(year, week)
     result = await db.execute(
         select(LearningItem)
         .where(
+            LearningItem.workspace_id == workspace_id,
             LearningItem.created_at >= week_start,
             LearningItem.created_at <= week_end,
+            LearningItem.visibility.in_(("private_draft", "workspace_shared")),
         )
         .order_by(LearningItem.category, LearningItem.confidence.desc())
     )
@@ -45,11 +52,7 @@ async def fetch_learning_items_for_week(
 
 
 def _build_digest_prompt(items: list[LearningItem], year: int, week: int) -> str:
-    lines = [
-        f"## {year}年 第{week}週の学び ({len(items)}件)",
-        "",
-    ]
-    # カテゴリ別にグループ化
+    lines = [f"## {year}年 第{week}週の学び ({len(items)}件)", ""]
     by_category: dict[str, list[LearningItem]] = {}
     for item in items:
         by_category.setdefault(item.category, []).append(item)
@@ -66,29 +69,27 @@ def _build_digest_prompt(items: list[LearningItem], year: int, week: int) -> str
 
 
 async def generate_weekly_digest(
-    year: int, week: int, provider: BaseLLMProvider, db: AsyncSession
+    year: int,
+    week: int,
+    workspace_id: int,
+    provider: BaseLLMProvider,
+    db: AsyncSession,
 ) -> WeeklyDigest:
-    """週報を生成してDBに保存する"""
-    items = await fetch_learning_items_for_week(year, week, db)
+    items = await fetch_learning_items_for_week(year, week, workspace_id, db)
 
     if not items:
         summary = "今週はレビューから抽出された学びがありませんでした。"
         repeated_issues: list[str] = []
         next_time_notes: list[str] = []
     else:
-        prompt = _build_digest_prompt(items, year, week)
-        import json
-        import anthropic as _anthropic
-
-        # LLM呼び出し（digest用の簡易プロンプト）
-        raw_result = await _call_llm_for_digest(prompt, provider)
+        raw_result = await _call_llm_for_digest(_build_digest_prompt(items, year, week), provider)
         summary = raw_result.get("summary", "")
         repeated_issues = raw_result.get("repeated_issues", [])
         next_time_notes = raw_result.get("next_time_notes", [])
 
-    # 既存レコードがあれば更新
     existing = await db.scalar(
         select(WeeklyDigest).where(
+            WeeklyDigest.workspace_id == workspace_id,
             WeeklyDigest.year == year,
             WeeklyDigest.week == week,
         )
@@ -102,6 +103,8 @@ async def generate_weekly_digest(
         digest = existing
     else:
         digest = WeeklyDigest(
+            workspace_id=workspace_id,
+            visibility="workspace_shared",
             year=year,
             week=week,
             summary=summary,
@@ -118,15 +121,10 @@ async def generate_weekly_digest(
 
 
 async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
-    """週報生成用LLM呼び出し（extract_learnings を流用）"""
-    import json
-    # provider の extract_learnings は LLMOutputV1 を返すが、
-    # digest では別プロンプトで直接 JSON を取得する
-    # AnthropicProvider / OllamaProvider の内部クライアントを使う
     try:
         from app.llm.anthropic_provider import AnthropicProvider
+
         if isinstance(provider, AnthropicProvider):
-            import anthropic
             message = provider.client.messages.create(
                 model=provider.model,
                 max_tokens=1024,
@@ -135,10 +133,11 @@ async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
             )
             return json.loads(message.content[0].text.strip())
     except Exception:
-        pass
+        logger.exception("Anthropic digest generation failed")
 
     try:
         from app.llm.ollama_provider import OllamaProvider
+
         if isinstance(provider, OllamaProvider):
             response = provider.client.chat(
                 model=provider.model,
@@ -150,6 +149,6 @@ async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
             )
             return json.loads(response.message.content.strip())
     except Exception:
-        pass
+        logger.exception("Ollama digest generation failed")
 
     return {"summary": prompt[:200], "repeated_issues": [], "next_time_notes": []}

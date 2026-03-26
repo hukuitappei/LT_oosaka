@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { getRequestContextHeaders } from "@/lib/request-context";
 
 const CATEGORY_COLORS: Record<string, string> = {
   security: "bg-red-100 text-red-800",
@@ -20,7 +21,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default async function LearningItemsPage() {
-  const items = await api.getLearningItems();
+  const requestHeaders = await getRequestContextHeaders()
+  const items = await api.getLearningItems({ headers: requestHeaders });
 
   return (
     <main className="min-h-screen p-8 max-w-3xl mx-auto">

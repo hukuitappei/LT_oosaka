@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { notFound } from "next/navigation";
+import { getRequestContextHeaders } from "@/lib/request-context";
 
 export default async function WeeklyDigestDetailPage({
   params,
@@ -8,7 +9,10 @@ export default async function WeeklyDigestDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const digest = await api.getWeeklyDigest(Number(id));
+  const requestHeaders = await getRequestContextHeaders()
+  const digest = await api.getWeeklyDigest(Number(id), {
+    headers: requestHeaders,
+  });
   if (!digest) notFound();
 
   return (

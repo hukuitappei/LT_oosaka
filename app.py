@@ -1,26 +1,34 @@
+from __future__ import annotations
+
 import os
 import re
-import anthropic
-import streamlit as st
-from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
 
-st.set_page_config(
-    page_title="アイデア中立評価",
-    page_icon="💡",
-    layout="centered",
-)
+if __name__ != "__main__":
+    __path__ = [str(Path(__file__).resolve().parent / "api" / "app")]
+else:
+    import anthropic
+    import streamlit as st
+    from dotenv import load_dotenv
 
-MODEL = "claude-haiku-4-5-20251001"
+    load_dotenv()
 
-EXAMPLE_IDEAS = [
-    "AIを使って会議の議事録を自動で要約するサービス",
-    "エンジニアの勉強記録をゲーム化するアプリ",
-    "地域の空き店舗とポップアップ出店者をマッチングするプラットフォーム",
-]
+    st.set_page_config(
+        page_title="アイデア中立評価",
+        page_icon="💡",
+        layout="centered",
+    )
 
-SYSTEM_PROMPT = """あなたは経験豊富なベンチャーキャピタリストとプロダクトマネージャーの視点を持つ、
+    MODEL = "claude-haiku-4-5-20251001"
+
+    EXAMPLE_IDEAS = [
+        "AIを使って会議の議事録を自動で要約するサービス",
+        "エンジニアの勉強記録をゲーム化するアプリ",
+        "地域の空き店舗とポップアップ出店者をマッチングするプラットフォーム",
+    ]
+
+    SYSTEM_PROMPT = """あなたは経験豊富なベンチャーキャピタリストとプロダクトマネージャーの視点を持つ、
 中立的なアイデア評価者です。感情的な応援も過度な批判もせず、事実と論理に基づいて評価します。
 
 ユーザーからアイデアが送られたら、必ず以下のフォーマットで回答してください。
@@ -50,77 +58,74 @@ SCORE: X/10
 ---
 """
 
+    def extract_score(text: str) -> int | None:
+        match = re.search(r"SCORE:\s*(\d+)/10", text)
+        if match:
+            return max(1, min(10, int(match.group(1))))
+        return None
 
-def extract_score(text: str) -> int | None:
-    match = re.search(r"SCORE:\s*(\d+)/10", text)
-    if match:
-        return max(1, min(10, int(match.group(1))))
-    return None
+    st.title("💡 あなたのアイデアを中立的に評価しよう")
+    st.caption("AIが良い点・懸念点・実現可能性を公平に分析します")
 
+    st.subheader("入力例（クリックで反映）")
+    cols = st.columns(3)
+    for i, (col, idea) in enumerate(zip(cols, EXAMPLE_IDEAS)):
+        if col.button(idea[:18] + "…", key=f"example_{i}"):
+            st.session_state["idea_input"] = idea
 
-# --- UI ---
-st.title("💡 あなたのアイデアを中立的に評価しよう")
-st.caption("AIが良い点・懸念点・実現可能性を公平に分析します")
+    idea = st.text_area(
+        "アイデアを入力",
+        value=st.session_state.get("idea_input", ""),
+        height=120,
+        placeholder="例：AIを使って〇〇するサービス、アプリ、仕組みなど",
+        key="idea_input",
+    )
 
-st.subheader("入力例（クリックで反映）")
-cols = st.columns(3)
-for i, (col, idea) in enumerate(zip(cols, EXAMPLE_IDEAS)):
-    if col.button(idea[:18] + "…", key=f"example_{i}"):
-        st.session_state["idea_input"] = idea
+    evaluate_btn = st.button(
+        "🔍 評価する",
+        type="primary",
+        use_container_width=True,
+        disabled=(not idea.strip()),
+    )
 
-idea = st.text_area(
-    "アイデアを入力",
-    value=st.session_state.get("idea_input", ""),
-    height=120,
-    placeholder="例：AIを使って〇〇するサービス、アプリ、仕組みなど",
-    key="idea_input",
-)
+    if evaluate_btn and idea.strip():
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            st.error("ANTHROPIC_API_KEY が設定されていません。.env ファイルを確認してください。")
+            st.stop()
 
-evaluate_btn = st.button(
-    "🔍 評価する",
-    type="primary",
-    use_container_width=True,
-    disabled=(not idea.strip()),
-)
+        client = anthropic.Anthropic(api_key=api_key)
 
-if evaluate_btn and idea.strip():
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        st.error("ANTHROPIC_API_KEY が設定されていません。.env ファイルを確認してください。")
-        st.stop()
+        st.divider()
+        st.subheader("📊 評価結果")
 
-    client = anthropic.Anthropic(api_key=api_key)
+        score_placeholder = st.empty()
+        result_placeholder = st.empty()
+        full_text = ""
 
-    st.divider()
-    st.subheader("📊 評価結果")
+        with st.spinner("評価中..."):
+            with client.messages.stream(
+                model=MODEL,
+                max_tokens=1024,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": idea}],
+            ) as stream:
+                for chunk in stream.text_stream:
+                    full_text += chunk
 
-    score_placeholder = st.empty()
-    result_placeholder = st.empty()
-    full_text = ""
+                    score = extract_score(full_text)
+                    if score is not None:
+                        with score_placeholder.container():
+                            col1, col2 = st.columns([1, 3])
+                            col1.metric("実現可能性", f"{score}/10")
+                            col2.progress(score / 10)
 
-    with st.spinner("評価中..."):
-        with client.messages.stream(
-            model=MODEL,
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": idea}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                full_text += chunk
+                    result_placeholder.markdown(full_text)
 
-                score = extract_score(full_text)
-                if score is not None:
-                    with score_placeholder.container():
-                        col1, col2 = st.columns([1, 3])
-                        col1.metric("実現可能性", f"{score}/10")
-                        col2.progress(score / 10)
+        final_score = extract_score(full_text)
+        if final_score is not None:
+            st.success(f"評価完了！ 実現可能性スコア: {final_score}/10")
 
-                result_placeholder.markdown(full_text)
-
-    final_score = extract_score(full_text)
-    if final_score is not None:
-        st.success(f"評価完了！ 実現可能性スコア: {final_score}/10")
-
-    summary_match = re.search(r"## 一言まとめ\n(.+)", full_text)
-    if summary_match:
-        st.info(f"**一言まとめ：** {summary_match.group(1).strip()}", icon="💬")
+        summary_match = re.search(r"## 一言まとめ\n(.+)", full_text)
+        if summary_match:
+            st.info(f"**一言まとめ：** {summary_match.group(1).strip()}", icon="💬")

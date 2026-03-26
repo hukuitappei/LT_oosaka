@@ -21,12 +21,13 @@ async def github_webhook(
     if event_type in ("pull_request", "pull_request_review", "pull_request_review_comment"):
         action = payload.get("action", "")
         pr_data = payload.get("pull_request", {})
-        repo_data = payload.get("repository", {})
 
-        # closed + merged or review submitted のときだけ処理
+        # merged, review submitted, review comment created のタイミングで処理
         if event_type == "pull_request" and action == "closed" and pr_data.get("merged"):
             background_tasks.add_task(process_pr_event, payload, db)
-        elif event_type in ("pull_request_review", "pull_request_review_comment") and action == "submitted":
+        elif event_type == "pull_request_review" and action == "submitted":
+            background_tasks.add_task(process_pr_event, payload, db)
+        elif event_type == "pull_request_review_comment" and action in {"created", "edited"}:
             background_tasks.add_task(process_pr_event, payload, db)
 
     return {"status": "accepted"}

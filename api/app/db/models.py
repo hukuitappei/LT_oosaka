@@ -1,6 +1,20 @@
+from __future__ import annotations
+
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Text, Boolean, DateTime, ForeignKey, JSON
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.db.session import Base
 
 
@@ -10,28 +24,108 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    github_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    github_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    repositories: Mapped[list["Repository"]] = relationship(back_populates="owner")
+    memberships: Mapped[list["WorkspaceMember"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    github_connections: Mapped[list["GitHubConnection"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    created_learning_items: Mapped[list["LearningItem"]] = relationship(
+        back_populates="created_by_user",
+        foreign_keys="LearningItem.created_by_user_id",
+    )
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+    __table_args__ = (UniqueConstraint("slug", name="uq_workspace_slug"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    slug: Mapped[str] = mapped_column(String(255), index=True)
+    is_personal: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    memberships: Mapped[list["WorkspaceMember"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+    )
+    repositories: Mapped[list["Repository"]] = relationship(back_populates="workspace")
+    weekly_digests: Mapped[list["WeeklyDigest"]] = relationship(back_populates="workspace")
+    learning_items: Mapped[list["LearningItem"]] = relationship(back_populates="workspace")
+    github_connections: Mapped[list["GitHubConnection"]] = relationship(back_populates="workspace")
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_member"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[str] = mapped_column(String(32), default="member")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="memberships")
+    user: Mapped["User"] = relationship(back_populates="memberships")
+
+
+class GitHubConnection(Base):
+    __tablename__ = "github_connections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String(32))  # app | token
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    installation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_account_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="github_connections")
+    user: Mapped["User | None"] = relationship(back_populates="github_connections")
+    repositories: Mapped[list["Repository"]] = relationship(back_populates="github_connection")
 
 
 class Repository(Base):
     __tablename__ = "repositories"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "github_id", name="uq_repo_workspace_github"),
+        UniqueConstraint("workspace_id", "full_name", name="uq_repo_workspace_full_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    github_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
-    full_name: Mapped[str] = mapped_column(String(255), unique=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    github_connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey("github_connections.id"),
+        nullable=True,
+    )
+    github_id: Mapped[int] = mapped_column(Integer, index=True)
+    full_name: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    owner: Mapped["User | None"] = relationship(back_populates="repositories")
+    workspace: Mapped["Workspace"] = relationship(back_populates="repositories")
+    github_connection: Mapped["GitHubConnection | None"] = relationship(back_populates="repositories")
     pull_requests: Mapped[list["PullRequest"]] = relationship(back_populates="repository")
 
 
 class PullRequest(Base):
     __tablename__ = "pull_requests"
+    __table_args__ = (
+        UniqueConstraint("repository_id", "github_pr_number", name="uq_repo_pr_number"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id"))
@@ -71,7 +165,10 @@ class LearningItem(Base):
     __tablename__ = "learning_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
     pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id"))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(32), default="private_draft")
     schema_version: Mapped[str] = mapped_column(String(10), default="1.0")
     title: Mapped[str] = mapped_column(String(255))
     detail: Mapped[str] = mapped_column(Text)
@@ -79,15 +176,26 @@ class LearningItem(Base):
     confidence: Mapped[float] = mapped_column(Float)
     action_for_next_time: Mapped[str] = mapped_column(Text)
     evidence: Mapped[str] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    workspace: Mapped["Workspace"] = relationship(back_populates="learning_items")
     pull_request: Mapped["PullRequest"] = relationship(back_populates="learning_items")
+    created_by_user: Mapped["User | None"] = relationship(
+        back_populates="created_learning_items",
+        foreign_keys=[created_by_user_id],
+    )
 
 
 class WeeklyDigest(Base):
     __tablename__ = "weekly_digests"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "year", "week", name="uq_workspace_digest_week"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    visibility: Mapped[str] = mapped_column(String(32), default="workspace_shared")
     year: Mapped[int] = mapped_column(Integer)
     week: Mapped[int] = mapped_column(Integer)
     summary: Mapped[str] = mapped_column(Text)
@@ -96,3 +204,5 @@ class WeeklyDigest(Base):
     pr_count: Mapped[int] = mapped_column(Integer, default=0)
     learning_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="weekly_digests")

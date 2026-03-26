@@ -9,6 +9,8 @@ from app.routers.learning_items import router as learning_items_router
 from app.routers.pull_requests import router as pull_requests_router
 from app.routers.weekly_digests import router as weekly_digests_router
 from app.routers.auth import router as auth_router
+from app.routers.workspaces import router as workspaces_router
+from app.routers.github_connections import router as github_connections_router
 from app.db.session import init_db
 from app.config import settings
 
@@ -30,6 +32,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(workspaces_router)
+app.include_router(github_connections_router)
 app.include_router(health_router)
 app.include_router(analyze_router)
 app.include_router(webhook_router)

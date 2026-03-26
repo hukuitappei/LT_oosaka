@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
+from __future__ import annotations
+
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import PullRequest, Repository, Workspace, User
 from app.db.session import get_db
-from app.db.models import Repository, PullRequest, User
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -38,10 +42,17 @@ class PullRequestResponse(BaseModel):
 async def list_repositories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
+    await require_workspace_role(
+        {"owner", "admin", "member"},
+        current_user=current_user,
+        current_workspace=current_workspace,
+        db=db,
+    )
     result = await db.execute(
         select(Repository)
-        .where(Repository.user_id == current_user.id)
+        .where(Repository.workspace_id == current_workspace.id)
         .order_by(Repository.created_at.desc())
     )
     return result.scalars().all()
@@ -52,9 +63,21 @@ async def list_pull_requests(
     repo_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
 ):
-    repo = await db.get(Repository, repo_id)
-    if not repo or repo.user_id != current_user.id:
+    await require_workspace_role(
+        {"owner", "admin", "member"},
+        current_user=current_user,
+        current_workspace=current_workspace,
+        db=db,
+    )
+    repo = await db.scalar(
+        select(Repository).where(
+            Repository.id == repo_id,
+            Repository.workspace_id == current_workspace.id,
+        )
+    )
+    if repo is None:
         raise HTTPException(status_code=404, detail="Repository not found")
     result = await db.execute(
         select(PullRequest)
