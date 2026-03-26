@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
@@ -18,6 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
 
 
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -27,7 +31,7 @@ class User(Base):
     github_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
     github_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     memberships: Mapped[list["WorkspaceMember"]] = relationship(
         back_populates="user",
@@ -51,7 +55,7 @@ class Workspace(Base):
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(255), index=True)
     is_personal: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     memberships: Mapped[list["WorkspaceMember"]] = relationship(
         back_populates="workspace",
@@ -73,7 +77,7 @@ class WorkspaceMember(Base):
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     role: Mapped[str] = mapped_column(String(32), default="member")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="memberships")
     user: Mapped["User"] = relationship(back_populates="memberships")
@@ -91,7 +95,7 @@ class GitHubConnection(Base):
     github_account_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
     label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace | None"] = relationship(back_populates="github_connections")
     user: Mapped["User | None"] = relationship(back_populates="github_connections")
@@ -114,7 +118,7 @@ class Repository(Base):
     github_id: Mapped[int] = mapped_column(Integer, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="repositories")
     github_connection: Mapped["GitHubConnection | None"] = relationship(back_populates="repositories")
@@ -136,7 +140,7 @@ class PullRequest(Base):
     author: Mapped[str] = mapped_column(String(255))
     github_url: Mapped[str] = mapped_column(String(500))
     merged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     processed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     repository: Mapped["Repository"] = relationship(back_populates="pull_requests")
@@ -156,7 +160,7 @@ class ReviewComment(Base):
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     diff_hunk: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     pull_request: Mapped["PullRequest"] = relationship(back_populates="review_comments")
 
@@ -177,7 +181,7 @@ class LearningItem(Base):
     action_for_next_time: Mapped[str] = mapped_column(Text)
     evidence: Mapped[str] = mapped_column(Text)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="learning_items")
     pull_request: Mapped["PullRequest"] = relationship(back_populates="learning_items")
@@ -203,6 +207,6 @@ class WeeklyDigest(Base):
     next_time_notes: Mapped[list] = mapped_column(JSON, default=list)
     pr_count: Mapped[int] = mapped_column(Integer, default=0)
     learning_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="weekly_digests")

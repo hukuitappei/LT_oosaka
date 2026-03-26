@@ -3,8 +3,8 @@ import "./globals.css"
 import NavBar from "@/components/NavBar"
 
 export const metadata: Metadata = {
-  title: "週報AI",
-  description: "試行錯誤を知識に変える週報AI",
+  title: "PR Knowledge Hub",
+  description: "PRレビューの指摘を、次回に再利用できる知識へ変える。",
 }
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className="bg-gray-50 text-gray-900">
+      <body className="bg-stone-950 text-stone-100">
         <NavBar />
         <main>{children}</main>
       </body>

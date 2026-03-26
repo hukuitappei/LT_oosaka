@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
+
     database_url: str = "sqlite+aiosqlite:///./lt_oosaka.db"
     redis_url: str = "redis://localhost:6379/0"
     ollama_base_url: str = "http://localhost:11434"
@@ -16,9 +18,6 @@ class Settings(BaseSettings):
     github_oauth_client_id: str = ""
     github_oauth_client_secret: str = ""
     github_oauth_redirect_uri: str = "http://localhost:8000/auth/github/callback"
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

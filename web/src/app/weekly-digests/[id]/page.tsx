@@ -1,44 +1,49 @@
-import Link from "next/link";
-import { api } from "@/lib/api";
-import { notFound } from "next/navigation";
-import { getRequestContextHeaders } from "@/lib/request-context";
+import Link from "next/link"
+import { notFound } from "next/navigation"
+import { api } from "@/lib/api"
+import { getRequestContextHeaders } from "@/lib/request-context"
 
 export default async function WeeklyDigestDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }) {
-  const { id } = await params;
+  const { id } = await params
   const requestHeaders = await getRequestContextHeaders()
   const digest = await api.getWeeklyDigest(Number(id), {
     headers: requestHeaders,
-  });
-  if (!digest) notFound();
+  })
+
+  if (!digest) notFound()
 
   return (
-    <main className="min-h-screen p-8 max-w-3xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/weekly-digests" className="text-sm text-gray-500 hover:underline">← 週報一覧</Link>
-        <h1 className="text-2xl font-bold">{digest.year}年 第{digest.week}週の週報</h1>
+    <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
+      <div className="mb-6 flex items-center gap-4">
+        <Link href="/weekly-digests" className="text-sm text-stone-400 hover:text-stone-200">
+          ← Weekly Digests
+        </Link>
+        <h1 className="text-2xl font-semibold text-white">
+          {digest.year}年 第{digest.week}週のDigest
+        </h1>
       </div>
 
-      <div className="flex gap-4 text-sm text-gray-500 mb-6">
+      <div className="mb-6 flex gap-4 text-sm text-stone-400">
         <span>PR {digest.pr_count}件</span>
-        <span>学び {digest.learning_count}件</span>
+        <span>Items {digest.learning_count}件</span>
       </div>
 
-      <section className="bg-white rounded-xl shadow p-6 mb-5">
-        <h2 className="font-semibold mb-3">今週のまとめ</h2>
-        <p className="text-gray-700 leading-relaxed">{digest.summary}</p>
+      <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <h2 className="mb-3 font-semibold text-white">今週の要約</h2>
+        <p className="leading-7 text-stone-300">{digest.summary}</p>
       </section>
 
       {digest.repeated_issues.length > 0 && (
-        <section className="bg-white rounded-xl shadow p-6 mb-5">
-          <h2 className="font-semibold mb-3">繰り返し出てきた詰まり</h2>
+        <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+          <h2 className="mb-3 font-semibold text-white">繰り返し出た論点</h2>
           <ul className="space-y-1">
-            {digest.repeated_issues.map((issue, i) => (
-              <li key={i} className="flex gap-2 text-sm text-gray-700">
-                <span className="text-orange-500 mt-0.5">▲</span>
+            {digest.repeated_issues.map((issue, index) => (
+              <li key={index} className="flex gap-2 text-sm text-stone-300">
+                <span className="mt-0.5 text-amber-300">•</span>
                 {issue}
               </li>
             ))}
@@ -47,12 +52,12 @@ export default async function WeeklyDigestDetailPage({
       )}
 
       {digest.next_time_notes.length > 0 && (
-        <section className="bg-white rounded-xl shadow p-6">
-          <h2 className="font-semibold mb-3">次週の自分へ</h2>
+        <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+          <h2 className="mb-3 font-semibold text-white">次回に持ち越すメモ</h2>
           <ul className="space-y-1">
-            {digest.next_time_notes.map((note, i) => (
-              <li key={i} className="flex gap-2 text-sm text-gray-700">
-                <span className="text-blue-500 mt-0.5">→</span>
+            {digest.next_time_notes.map((note, index) => (
+              <li key={index} className="flex gap-2 text-sm text-stone-300">
+                <span className="mt-0.5 text-sky-300">•</span>
                 {note}
               </li>
             ))}
@@ -60,5 +65,5 @@ export default async function WeeklyDigestDetailPage({
         </section>
       )}
     </main>
-  );
+  )
 }

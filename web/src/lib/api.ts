@@ -13,6 +13,17 @@ export interface LearningItem {
   evidence: string
   visibility: string
   created_at: string
+  repository: {
+    id: number
+    full_name: string
+    name: string
+  }
+  pull_request: {
+    id: number
+    github_pr_number: number
+    title: string
+    github_url: string
+  }
 }
 
 export interface WeeklyDigest {
