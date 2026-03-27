@@ -1,7 +1,15 @@
 import logging
-from types import SimpleNamespace
+from collections.abc import Coroutine
 
 import pytest
+
+
+def _drain_coroutine_and_return(result):
+    def runner(coro: Coroutine):
+        coro.close()
+        return result
+
+    return runner
 
 
 @pytest.mark.asyncio
@@ -15,10 +23,9 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
         "installation": {"id": 999},
     }
 
-    monkeypatch.setattr(extract_pr_task, "request", SimpleNamespace(retries=0), raising=False)
     monkeypatch.setattr(
         "app.tasks.extract.asyncio.run",
-        lambda coro: {"status": "ok", "pr_number": 42},
+        _drain_coroutine_and_return({"status": "ok", "pr_number": 42}),
     )
 
     with caplog.at_level(logging.INFO):
@@ -41,10 +48,9 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
 async def test_reanalyze_pr_task_logs_context(monkeypatch, caplog):
     from app.tasks.extract import reanalyze_pr_task
 
-    monkeypatch.setattr(reanalyze_pr_task, "request", SimpleNamespace(retries=0), raising=False)
     monkeypatch.setattr(
         "app.tasks.extract.asyncio.run",
-        lambda coro: {"status": "ok", "pr_id": 42},
+        _drain_coroutine_and_return({"status": "ok", "pr_id": 42}),
     )
 
     with caplog.at_level(logging.INFO):
@@ -66,10 +72,9 @@ async def test_reanalyze_pr_task_logs_context(monkeypatch, caplog):
 async def test_generate_digest_task_logs_context(monkeypatch, caplog):
     from app.tasks.extract import generate_digest_task
 
-    monkeypatch.setattr(generate_digest_task, "request", SimpleNamespace(retries=0), raising=False)
     monkeypatch.setattr(
         "app.tasks.extract.asyncio.run",
-        lambda coro: {"status": "ok", "digest_id": 7},
+        _drain_coroutine_and_return({"status": "ok", "digest_id": 7}),
     )
 
     with caplog.at_level(logging.INFO):
