@@ -58,7 +58,9 @@ Affected areas:
 - `api/tests/test_learning_saver.py`
 - `api/tests/test_pr_processor.py`
 - `api/tests/test_preprocessor.py`
-- `api/tests/test_webhook_and_digest.py`
+- `api/tests/test_webhook.py`
+- `api/tests/test_weekly_digests_router.py`
+- `api/tests/test_weekly_digests_service.py`
 
 ## Decision 5: CI Is the Minimum Quality Gate
 
@@ -101,6 +103,24 @@ Affected areas:
 - `api/app/tasks/extract.py`
 - `api/app/services/pr_processor.py`
 - `api/app/services/digest_generator.py`
+
+## Decision 8: Routers Stay Thin, Services Own Orchestration
+
+- Status: active
+- Decision: FastAPI routers should handle auth, validation, and HTTP translation; service modules should own query/orchestration logic
+- Reason: route-level query and provider logic was making refactors noisy and tests too mixed
+- Consequence: router tests should focus on contracts, while service tests cover lookup, provider resolution, and workflow delegation
+
+Affected areas:
+
+- `api/app/routers/pull_requests.py`
+- `api/app/services/pull_requests.py`
+- `api/app/routers/weekly_digests.py`
+- `api/app/services/weekly_digests.py`
+- `api/tests/test_pull_requests_reanalyze.py`
+- `api/tests/test_pull_requests_service.py`
+- `api/tests/test_weekly_digests_router.py`
+- `api/tests/test_weekly_digests_service.py`
 
 ## Known Transitional State
 

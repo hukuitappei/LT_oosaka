@@ -65,6 +65,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - CI for backend tests and frontend build
 - digest flow refactored to be workspace-centric
 - PR reanalysis moved to Celery
+- router/service boundaries tightened for PR reanalysis and weekly digest flows
 - backend tests updated to current contracts
 
 ## Current Architecture Direction
@@ -74,6 +75,12 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - `workspace` is the primary ownership boundary
 - `user` is the authentication actor
 - digest generation and listing are workspace-scoped
+
+### Service Boundaries
+
+- routers should stay focused on auth, request parsing, and HTTP errors
+- service modules should own workspace-scoped queries and orchestration
+- route and service tests should be split when they fail for different reasons
 
 ### Async
 
@@ -95,9 +102,9 @@ Current status: the fixture-backed analysis path is retained as a development/te
 
 ### High Priority
 
-1. Introduce clearer service APIs for digest generation and PR ingestion.
-2. Reduce query logic duplication across routers and services.
-3. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
+1. Continue moving remaining route-owned query/orchestration logic behind service APIs.
+2. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
+3. Reduce remaining query duplication across services where the boundary is still fuzzy.
 
 ### Medium Priority
 

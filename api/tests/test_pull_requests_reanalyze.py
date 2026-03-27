@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -12,13 +12,13 @@ async def test_reanalyze_pull_request_enqueues_celery_task(monkeypatch):
     current_user = SimpleNamespace(id=7)
     current_workspace = SimpleNamespace(id=3)
     db = SimpleNamespace()
-    pr = SimpleNamespace(id=42)
 
     monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
-    monkeypatch.setattr(routes, "_get_workspace_pr", AsyncMock(return_value=pr))
-
-    delay_mock = MagicMock()
-    monkeypatch.setattr("app.tasks.extract.reanalyze_pr_task.delay", delay_mock)
+    monkeypatch.setattr(
+        routes,
+        "request_reanalysis_for_pull_request",
+        AsyncMock(return_value={"status": "accepted", "pr_id": 42}),
+    )
 
     response = await routes.reanalyze_pull_request(
         42,
@@ -28,7 +28,7 @@ async def test_reanalyze_pull_request_enqueues_celery_task(monkeypatch):
     )
 
     assert response == {"status": "accepted", "pr_id": 42}
-    delay_mock.assert_called_once_with(42, 3, 7)
+    routes.request_reanalysis_for_pull_request.assert_awaited_once_with(db, 42, 3, 7)
 
 
 @pytest.mark.asyncio
@@ -40,10 +40,11 @@ async def test_reanalyze_pull_request_returns_404_when_pr_missing(monkeypatch):
     db = SimpleNamespace()
 
     monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
-    monkeypatch.setattr(routes, "_get_workspace_pr", AsyncMock(return_value=None))
-
-    delay_mock = MagicMock()
-    monkeypatch.setattr("app.tasks.extract.reanalyze_pr_task.delay", delay_mock)
+    monkeypatch.setattr(
+        routes,
+        "request_reanalysis_for_pull_request",
+        AsyncMock(side_effect=routes.PullRequestNotFoundError),
+    )
 
     with pytest.raises(HTTPException) as exc:
         await routes.reanalyze_pull_request(
@@ -54,4 +55,4 @@ async def test_reanalyze_pull_request_returns_404_when_pr_missing(monkeypatch):
         )
 
     assert exc.value.status_code == 404
-    delay_mock.assert_not_called()
+    routes.request_reanalysis_for_pull_request.assert_awaited_once_with(db, 42, 3, 7)
