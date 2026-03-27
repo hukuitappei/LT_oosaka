@@ -42,7 +42,9 @@ export default async function LearningItemsPage() {
             <div key={item.id} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 backdrop-blur">
               <div className="mb-2 flex items-start justify-between gap-2">
                 <h3 className="font-semibold text-white">{item.title}</h3>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${CATEGORY_COLORS[item.category] ?? CATEGORY_COLORS.other}`}>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${CATEGORY_COLORS[item.category] ?? CATEGORY_COLORS.other}`}
+                >
                   {CATEGORY_LABELS[item.category] ?? item.category}
                 </span>
               </div>

@@ -5,7 +5,7 @@ celery_app = Celery(
     "lt_oosaka",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.sample"],
+    include=["app.tasks.extract"],
 )
 
 celery_app.conf.update(

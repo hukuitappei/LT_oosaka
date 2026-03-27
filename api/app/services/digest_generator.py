@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import date, timedelta
@@ -74,6 +75,8 @@ async def generate_weekly_digest(
     workspace_id: int,
     provider: BaseLLMProvider,
     db: AsyncSession,
+    *,
+    user_id: int | None = None,
 ) -> WeeklyDigest:
     items = await fetch_learning_items_for_week(year, week, workspace_id, db)
 
@@ -100,6 +103,7 @@ async def generate_weekly_digest(
         existing.next_time_notes = next_time_notes
         existing.pr_count = len(set(i.pull_request_id for i in items))
         existing.learning_count = len(items)
+        existing.user_id = user_id
         digest = existing
     else:
         digest = WeeklyDigest(
@@ -112,6 +116,7 @@ async def generate_weekly_digest(
             next_time_notes=next_time_notes,
             pr_count=len(set(i.pull_request_id for i in items)),
             learning_count=len(items),
+            user_id=user_id,
         )
         db.add(digest)
 
@@ -121,34 +126,25 @@ async def generate_weekly_digest(
 
 
 async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
-    try:
-        from app.llm.anthropic_provider import AnthropicProvider
+    max_retries = 3
+    last_exc: Exception | None = None
 
-        if isinstance(provider, AnthropicProvider):
-            message = provider.client.messages.create(
-                model=provider.model,
-                max_tokens=1024,
-                system=DIGEST_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return json.loads(message.content[0].text.strip())
-    except Exception:
-        logger.exception("Anthropic digest generation failed")
+    for attempt in range(1, max_retries + 1):
+        try:
+            raw = await provider.generate_text(DIGEST_SYSTEM_PROMPT, prompt)
+            return json.loads(raw)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                delay = 2.0 * (2 ** (attempt - 1))
+                logger.warning(
+                    "Digest LLM attempt %d/%d failed, retrying in %.1fs: %s",
+                    attempt,
+                    max_retries,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
 
-    try:
-        from app.llm.ollama_provider import OllamaProvider
-
-        if isinstance(provider, OllamaProvider):
-            response = provider.client.chat(
-                model=provider.model,
-                messages=[
-                    {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                format="json",
-            )
-            return json.loads(response.message.content.strip())
-    except Exception:
-        logger.exception("Ollama digest generation failed")
-
+    logger.error("Digest LLM failed after %d attempts: %s", max_retries, last_exc)
     return {"summary": prompt[:200], "repeated_issues": [], "next_time_notes": []}

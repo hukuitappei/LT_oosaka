@@ -22,3 +22,14 @@ class OllamaProvider(BaseLLMProvider):
         raw = response.message.content.strip()
         data = json.loads(raw)
         return LLMOutputV1(**data)
+
+    async def generate_text(self, system_prompt: str, user_message: str) -> str:
+        response = self.client.chat(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            format="json",
+        )
+        return response.message.content.strip()

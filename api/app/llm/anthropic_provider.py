@@ -42,3 +42,12 @@ class AnthropicProvider(BaseLLMProvider):
         raw = message.content[0].text.strip()
         data = json.loads(raw)
         return LLMOutputV1(**data)
+
+    async def generate_text(self, system_prompt: str, user_message: str) -> str:
+        message = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        return message.content[0].text.strip()

@@ -134,6 +134,10 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
     await db.commit()
     await db.refresh(pr)
 
+    if pr.processed:
+        logger.info("PR #%d already processed, skipping extraction", pr.github_pr_number)
+        return
+
     if not settings.anthropic_api_key and not settings.ollama_base_url:
         return
 

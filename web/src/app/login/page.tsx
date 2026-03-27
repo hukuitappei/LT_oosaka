@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { login, register } from "@/lib/api"
-import { removeWorkspaceId, setToken, setWorkspaceId } from "@/lib/auth"
+import { removeWorkspaceId, setToken, setUserEmail, setWorkspaceId } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,10 +18,9 @@ export default function LoginPage() {
     setError("")
     setLoading(true)
     try {
-      const res = mode === "login"
-        ? await login(email, password)
-        : await register(email, password)
+      const res = mode === "login" ? await login(email, password) : await register(email, password)
       setToken(res.access_token)
+      setUserEmail(email)
       if (res.default_workspace_id) {
         setWorkspaceId(String(res.default_workspace_id))
       } else {
@@ -74,9 +73,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-200">
-              メールアドレス
-            </label>
+            <label className="mb-1 block text-sm font-medium text-stone-200">メールアドレス</label>
             <input
               type="email"
               required
@@ -87,9 +84,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-200">
-              パスワード
-            </label>
+            <label className="mb-1 block text-sm font-medium text-stone-200">パスワード</label>
             <input
               type="password"
               required

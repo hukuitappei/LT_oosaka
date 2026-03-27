@@ -18,6 +18,16 @@ export default async function Home() {
     api.getWeeklyDigests({ headers: requestHeaders }),
   ])
 
+  if (!items && !digests) {
+    return (
+      <main className="min-h-screen p-8 max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-1">週報AI</h1>
+        <p className="text-gray-500 mb-8">試行錯誤を知識に変えるシステム</p>
+        <p className="text-center text-gray-500 py-8">データを取得できませんでした。ログインしてください。</p>
+      </main>
+    )
+  }
+
   const latestDigest = digests?.[0] ?? null
   const latestItems = (items ?? []).slice(0, 3)
 

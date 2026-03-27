@@ -110,4 +110,11 @@ async def generate_digest(
 
     from app.services.digest_generator import generate_weekly_digest
 
-    return await generate_weekly_digest(year, week, current_workspace.id, provider, db)
+    return await generate_weekly_digest(
+        year,
+        week,
+        current_workspace.id,
+        provider,
+        db,
+        user_id=current_user.id,
+    )

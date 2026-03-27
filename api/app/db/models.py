@@ -87,7 +87,7 @@ class GitHubConnection(Base):
     __tablename__ = "github_connections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    provider_type: Mapped[str] = mapped_column(String(32))  # app | token
+    provider_type: Mapped[str] = mapped_column(String(32))
     workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     installation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
@@ -136,7 +136,7 @@ class PullRequest(Base):
     github_pr_number: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(500))
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    state: Mapped[str] = mapped_column(String(50))  # open / closed / merged
+    state: Mapped[str] = mapped_column(String(50))
     author: Mapped[str] = mapped_column(String(255))
     github_url: Mapped[str] = mapped_column(String(500))
     merged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -208,5 +208,7 @@ class WeeklyDigest(Base):
     pr_count: Mapped[int] = mapped_column(Integer, default=0)
     learning_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="weekly_digests")
+    owner: Mapped["User | None"] = relationship("User")

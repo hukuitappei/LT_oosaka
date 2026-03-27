@@ -2,6 +2,7 @@ export const TOKEN_KEY = "auth_token"
 export const WORKSPACE_KEY = "workspace_id"
 export const TOKEN_COOKIE = "token"
 export const WORKSPACE_COOKIE = "workspace_id"
+export const EMAIL_KEY = "auth_email"
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -32,9 +33,20 @@ export function setToken(token: string): void {
   writeCookie(TOKEN_COOKIE, token)
 }
 
+export function getUserEmail(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(EMAIL_KEY)
+}
+
+export function setUserEmail(email: string): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(EMAIL_KEY, email)
+}
+
 export function removeToken(): void {
   if (typeof window === "undefined") return
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(EMAIL_KEY)
   clearCookie(TOKEN_COOKIE)
 }
 
