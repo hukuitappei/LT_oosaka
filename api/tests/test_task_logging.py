@@ -1,15 +1,6 @@
 import logging
-from collections.abc import Coroutine
 
 import pytest
-
-
-def _drain_coroutine_and_return(result):
-    def runner(coro: Coroutine):
-        coro.close()
-        return result
-
-    return runner
 
 
 @pytest.mark.asyncio
@@ -23,10 +14,11 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
         "installation": {"id": 999},
     }
 
-    monkeypatch.setattr(
-        "app.tasks.extract.asyncio.run",
-        _drain_coroutine_and_return({"status": "ok", "pr_number": 42}),
-    )
+    def fake_run(coro):
+        coro.close()
+        return {"status": "ok", "pr_number": 42}
+
+    monkeypatch.setattr("app.tasks.extract.asyncio.run", fake_run)
 
     with caplog.at_level(logging.INFO):
         result = extract_pr_task.__wrapped__(payload)
@@ -48,10 +40,11 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
 async def test_reanalyze_pr_task_logs_context(monkeypatch, caplog):
     from app.tasks.extract import reanalyze_pr_task
 
-    monkeypatch.setattr(
-        "app.tasks.extract.asyncio.run",
-        _drain_coroutine_and_return({"status": "ok", "pr_id": 42}),
-    )
+    def fake_run(coro):
+        coro.close()
+        return {"status": "ok", "pr_id": 42}
+
+    monkeypatch.setattr("app.tasks.extract.asyncio.run", fake_run)
 
     with caplog.at_level(logging.INFO):
         result = reanalyze_pr_task.__wrapped__(42, 3, 7)
@@ -72,10 +65,11 @@ async def test_reanalyze_pr_task_logs_context(monkeypatch, caplog):
 async def test_generate_digest_task_logs_context(monkeypatch, caplog):
     from app.tasks.extract import generate_digest_task
 
-    monkeypatch.setattr(
-        "app.tasks.extract.asyncio.run",
-        _drain_coroutine_and_return({"status": "ok", "digest_id": 7}),
-    )
+    def fake_run(coro):
+        coro.close()
+        return {"status": "ok", "digest_id": 7}
+
+    monkeypatch.setattr("app.tasks.extract.asyncio.run", fake_run)
 
     with caplog.at_level(logging.INFO):
         result = generate_digest_task.__wrapped__(2026, 13, 5)
