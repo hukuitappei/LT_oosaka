@@ -116,5 +116,4 @@ async def generate_digest(
         current_workspace.id,
         provider,
         db,
-        user_id=current_user.id,
     )

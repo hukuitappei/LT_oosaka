@@ -24,7 +24,7 @@ function clearCookie(name: string): void {
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null
-  return localStorage.getItem(TOKEN_KEY) ?? readCookie(TOKEN_COOKIE)
+  return readCookie(TOKEN_COOKIE) ?? localStorage.getItem(TOKEN_KEY)
 }
 
 export function setToken(token: string): void {
@@ -52,7 +52,7 @@ export function removeToken(): void {
 
 export function getWorkspaceId(): string | null {
   if (typeof window === "undefined") return null
-  return localStorage.getItem(WORKSPACE_KEY) ?? readCookie(WORKSPACE_COOKIE)
+  return readCookie(WORKSPACE_COOKIE) ?? localStorage.getItem(WORKSPACE_KEY)
 }
 
 export function setWorkspaceId(workspaceId: string): void {
@@ -73,8 +73,8 @@ export function isAuthenticated(): boolean {
 
 export function getClientRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {}
-  const token = getToken()
-  const workspaceId = getWorkspaceId()
+  const token = readCookie(TOKEN_COOKIE) ?? getToken()
+  const workspaceId = readCookie(WORKSPACE_COOKIE) ?? getWorkspaceId()
 
   if (token) headers.Authorization = `Bearer ${token}`
   if (workspaceId) headers["X-Workspace-Id"] = workspaceId

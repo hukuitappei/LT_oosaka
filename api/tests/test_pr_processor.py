@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
 def _make_webhook_payload(pr_number: int = 42, repo_id: int = 100) -> dict:
@@ -21,41 +21,60 @@ def _make_webhook_payload(pr_number: int = 42, repo_id: int = 100) -> dict:
     }
 
 
+def _make_workspace_connection(workspace_id: int = 1):
+    connection = MagicMock()
+    connection.workspace_id = workspace_id
+    connection.user_id = None
+    connection.id = 10
+    return connection
+
+
+def _make_workspace(workspace_id: int = 1):
+    workspace = MagicMock()
+    workspace.id = workspace_id
+    return workspace
+
+
 @pytest.mark.asyncio
 async def test_process_pr_event_skips_if_already_processed():
-    """PR が processed=True の場合、学習抽出をスキップする（冪等性）"""
-    from app.services.pr_processor import process_pr_event
-
-    mock_db = AsyncMock()
-
-    # Mock existing processed PR
-    mock_repo = MagicMock()
-    mock_repo.id = 1
-    mock_pr = MagicMock()
-    mock_pr.processed = True
-    mock_pr.github_pr_number = 42
-
-    mock_db.scalar = AsyncMock(side_effect=[mock_repo, mock_pr])
-    mock_db.commit = AsyncMock()
-    mock_db.refresh = AsyncMock()
-
-    payload = _make_webhook_payload()
-
-    with patch("app.services.pr_processor.extract_from_pr") as mock_extract:
-        await process_pr_event(payload, mock_db)
-        mock_extract.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_process_pr_event_creates_repository_if_not_exists():
-    """リポジトリが存在しない場合は新規作成される"""
     from app.services.pr_processor import process_pr_event
     from app.config import settings
 
     mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=_make_workspace())
 
-    # First scalar (repo lookup) returns None, second (PR lookup) returns None
-    mock_db.scalar = AsyncMock(side_effect=[None, None])
+    mock_connection = _make_workspace_connection()
+    mock_repo = MagicMock(id=1)
+    mock_pr = MagicMock()
+    mock_pr.processed = True
+    mock_pr.github_pr_number = 42
+    mock_pr.repository_id = 1
+
+    mock_db.scalar = AsyncMock(side_effect=[mock_connection, mock_repo, mock_pr])
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.add = MagicMock()
+
+    payload = _make_webhook_payload()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
+        monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
+        await process_pr_event(payload, mock_db)
+
+    mock_db.add.assert_not_called()
+    mock_db.commit.assert_called_once()
+    assert mock_pr.processed is True
+
+
+@pytest.mark.asyncio
+async def test_process_pr_event_creates_repository_if_not_exists():
+    from app.services.pr_processor import process_pr_event
+    from app.config import settings
+
+    mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=_make_workspace())
+    mock_db.scalar = AsyncMock(side_effect=[_make_workspace_connection(), None, None])
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
@@ -65,13 +84,11 @@ async def test_process_pr_event_creates_repository_if_not_exists():
 
     payload = _make_webhook_payload()
 
-    # No LLM configured → extraction skipped
-    with patch.object(settings, "anthropic_api_key", ""), \
-         patch.object(settings, "ollama_base_url", ""):
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
+        monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
         await process_pr_event(payload, mock_db)
 
-    # Should have added both a Repository and a PullRequest
-    from app.db.models import Repository, PullRequest
     added_types = [type(obj).__name__ for obj in added_objects]
     assert "Repository" in added_types
     assert "PullRequest" in added_types
@@ -79,16 +96,15 @@ async def test_process_pr_event_creates_repository_if_not_exists():
 
 @pytest.mark.asyncio
 async def test_process_pr_event_reuses_existing_repository():
-    """リポジトリが既に存在する場合は新規作成しない"""
     from app.services.pr_processor import process_pr_event
     from app.config import settings
 
     mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=_make_workspace())
 
-    # Existing repo found, new PR
     mock_repo = MagicMock()
     mock_repo.id = 10
-    mock_db.scalar = AsyncMock(side_effect=[mock_repo, None])
+    mock_db.scalar = AsyncMock(side_effect=[_make_workspace_connection(), mock_repo, None])
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
@@ -98,39 +114,43 @@ async def test_process_pr_event_reuses_existing_repository():
 
     payload = _make_webhook_payload()
 
-    with patch.object(settings, "anthropic_api_key", ""), \
-         patch.object(settings, "ollama_base_url", ""):
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
+        monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
         await process_pr_event(payload, mock_db)
 
-    from app.db.models import Repository
     added_types = [type(obj).__name__ for obj in added_objects]
-    # Repository should NOT be added again
     assert "Repository" not in added_types
-    # PullRequest should be created
     assert "PullRequest" in added_types
 
 
 @pytest.mark.asyncio
 async def test_process_pr_event_no_extraction_without_llm_config():
-    """LLM の設定がない場合は学習抽出を実行しない"""
     from app.services.pr_processor import process_pr_event
     from app.config import settings
 
     mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=_make_workspace())
+
     mock_repo = MagicMock()
     mock_repo.id = 1
     mock_pr = MagicMock()
     mock_pr.processed = False
     mock_pr.github_pr_number = 42
+    mock_pr.repository_id = 1
 
-    mock_db.scalar = AsyncMock(side_effect=[mock_repo, mock_pr])
+    mock_db.scalar = AsyncMock(side_effect=[_make_workspace_connection(), mock_repo, mock_pr])
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
+    mock_db.add = MagicMock()
 
     payload = _make_webhook_payload()
 
-    with patch.object(settings, "anthropic_api_key", ""), \
-         patch.object(settings, "ollama_base_url", ""), \
-         patch("app.services.pr_processor.extract_from_pr") as mock_extract:
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
+        monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
         await process_pr_event(payload, mock_db)
-        mock_extract.assert_not_called()
+
+    mock_db.add.assert_not_called()
+    mock_db.commit.assert_called_once()
+    assert mock_pr.processed is False

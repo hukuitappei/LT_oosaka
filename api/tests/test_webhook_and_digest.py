@@ -151,7 +151,7 @@ async def test_generate_digest_route_requires_llm_provider(monkeypatch, db_sessi
     monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
     monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
 
-    from app.db.models import User, Workspace, WorkspaceMember
+    from app.db.models import LearningItem, PullRequest, Repository, User, Workspace, WorkspaceMember
 
     owner = User(email="digest-owner@example.com", hashed_password="hashed::pw")
     workspace = Workspace(name="Digest Workspace", slug="digest-workspace", is_personal=True)
@@ -182,6 +182,15 @@ async def test_generate_weekly_digest_persists_workspace_digest(db_session):
         async def extract_learnings(self, pr_data):  # pragma: no cover - not used
             raise AssertionError("not called")
 
+        async def generate_text(self, system_prompt, user_message):
+            return json.dumps(
+                {
+                    "summary": "Weekly digest summary",
+                    "repeated_issues": [],
+                    "next_time_notes": [],
+                }
+            )
+
     owner = User(email="digest-owner-2@example.com", hashed_password="hashed::pw")
     workspace = Workspace(name="Digest Workspace 2", slug="digest-workspace-2", is_personal=True)
     db_session.add_all([owner, workspace])
@@ -189,7 +198,46 @@ async def test_generate_weekly_digest_persists_workspace_digest(db_session):
     db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=owner.id, role="owner"))
     await db_session.commit()
 
+    repo = Repository(
+        workspace_id=workspace.id,
+        github_id=1,
+        full_name="owner/repo",
+        name="repo",
+    )
+    db_session.add(repo)
+    await db_session.flush()
+
+    pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=42,
+        title="Improve validation",
+        body="body",
+        state="merged",
+        author="author",
+        github_url="https://github.com/owner/repo/pull/42",
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+    )
+    db_session.add(pr)
+    await db_session.flush()
+
+    item = LearningItem(
+        workspace_id=workspace.id,
+        pull_request_id=pr.id,
+        schema_version="1.0",
+        title="Validate before persistence",
+        detail="Check payloads before saving.",
+        category="design",
+        confidence=0.9,
+        action_for_next_time="Validate requests earlier.",
+        evidence="A review note flagged missing validation.",
+        created_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+    )
+    db_session.add(item)
+    await db_session.commit()
+
     digest = await generate_weekly_digest(2026, 12, workspace.id, DummyProvider(), db_session)
 
     assert digest.workspace_id == workspace.id
-    assert digest.summary == "今週はレビューから抽出された学びがありませんでした。"
+    assert digest.summary == "Weekly digest summary"
+    assert digest.pr_count == 1
+    assert digest.learning_count == 1

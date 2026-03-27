@@ -75,8 +75,6 @@ async def generate_weekly_digest(
     workspace_id: int,
     provider: BaseLLMProvider,
     db: AsyncSession,
-    *,
-    user_id: int | None = None,
 ) -> WeeklyDigest:
     items = await fetch_learning_items_for_week(year, week, workspace_id, db)
 
@@ -103,7 +101,6 @@ async def generate_weekly_digest(
         existing.next_time_notes = next_time_notes
         existing.pr_count = len(set(i.pull_request_id for i in items))
         existing.learning_count = len(items)
-        existing.user_id = user_id
         digest = existing
     else:
         digest = WeeklyDigest(
@@ -116,7 +113,6 @@ async def generate_weekly_digest(
             next_time_notes=next_time_notes,
             pr_count=len(set(i.pull_request_id for i in items)),
             learning_count=len(items),
-            user_id=user_id,
         )
         db.add(digest)
 
