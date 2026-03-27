@@ -68,6 +68,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - router/service boundaries tightened for PR reanalysis and weekly digest flows
 - workspace membership queries and updates moved behind service APIs
 - auth session and GitHub OAuth completion moved behind service APIs
+- repository and learning item queries moved behind service APIs
 - backend tests updated to current contracts
 
 ## Current Architecture Direction
@@ -106,7 +107,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 
 1. Continue moving remaining route-owned query/orchestration logic behind service APIs.
 2. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
-3. Review remaining routers for mixed query logic, especially repository and learning item listing paths.
+3. Review remaining routers for mixed query logic after the repository and learning item cleanup.
 
 ### Medium Priority
 

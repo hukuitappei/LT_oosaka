@@ -122,6 +122,10 @@ Affected areas:
 - `api/app/routers/auth.py`
 - `api/app/services/user_sessions.py`
 - `api/app/services/github_oauth.py`
+- `api/app/routers/repositories.py`
+- `api/app/services/repositories.py`
+- `api/app/routers/learning_items.py`
+- `api/app/services/learning_items.py`
 - `api/tests/test_pull_requests_reanalyze.py`
 - `api/tests/test_pull_requests_service.py`
 - `api/tests/test_weekly_digests_router.py`
@@ -130,6 +134,10 @@ Affected areas:
 - `api/tests/test_workspaces_service.py`
 - `api/tests/test_auth_router.py`
 - `api/tests/test_auth.py`
+- `api/tests/test_repositories_router.py`
+- `api/tests/test_repositories_service.py`
+- `api/tests/test_learning_items_router.py`
+- `api/tests/test_learning_items_service.py`
 
 ## Known Transitional State
 
