@@ -11,6 +11,7 @@ The current production path is the `api/` FastAPI backend plus the `web/` Next.j
 - Stores repositories, pull requests, workspaces, and weekly digests
 - Shows a dashboard for recent learnings and digest summaries
 - Supports email/password auth and GitHub OAuth / GitHub App connections
+- Uses Celery for async PR extraction and digest generation
 
 ## Architecture
 
@@ -39,13 +40,21 @@ docker compose up --build
 - API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
+The API container runs `alembic upgrade head` on startup.
+
 ### Local Development
 
 Backend:
 
 ```bash
-pip install -r api/requirements.txt
 cd api
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+# source .venv/bin/activate
+pip install -r requirements.txt
+alembic -c migrations/alembic.ini upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -55,6 +64,13 @@ Frontend:
 cd web
 npm install
 npm run dev
+```
+
+Worker:
+
+```bash
+cd api
+celery -A app.celery_app worker --loglevel=info
 ```
 
 For the full feature set, you still need Redis, PostgreSQL, and an LLM backend available. The backend can fall back to the SQLite default from `.env.example` for simpler local work, but GitHub and digest flows expect the rest of the stack to be configured.
@@ -83,6 +99,17 @@ Notes:
 - `SECRET_KEY` should be replaced before any shared or deployed use.
 - GitHub App and OAuth variables are only required when those integrations are enabled.
 
+## GitHub App Setup
+
+1. Create a GitHub App at `https://github.com/settings/apps/new`.
+2. Set the webhook URL to `https://<your-domain>/webhooks/github`.
+3. Set a webhook secret and copy it into `GITHUB_WEBHOOK_SECRET`.
+4. Grant repository permissions for pull requests, contents, and metadata.
+5. Subscribe to `pull_request`, `pull_request_review`, and `pull_request_review_comment`.
+6. Copy the App ID into `GITHUB_APP_ID`.
+7. Generate a private key and copy the PEM contents into `GITHUB_PRIVATE_KEY`.
+8. Install the app on the target repositories.
+
 ## Main User Flow
 
 1. Register or log in at `/login`.
@@ -91,6 +118,23 @@ Notes:
 4. Review extracted learning items on the home dashboard and `/learning-items`.
 5. Open weekly summaries on `/weekly-digests` and `/weekly-digests/[id]`.
 6. Use the backend webhook and async worker path to keep PR data and digests up to date.
+
+## Testing
+
+```bash
+cd api
+pip install -r requirements-test.txt
+pytest tests/ -v
+```
+
+Key backend test areas:
+
+- `tests/test_preprocessor.py`
+- `tests/test_extractor.py`
+- `tests/test_learning_saver.py`
+- `tests/test_webhook_and_digest.py`
+- `tests/test_workspace_access.py`
+- `tests/test_auth.py`
 
 ## Current Limitations
 

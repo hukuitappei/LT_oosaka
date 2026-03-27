@@ -182,11 +182,43 @@
 
 ---
 
+---
+
+## Phase 7 の追加意思決定
+
+### Celery タスク設計
+- **決定**: `asyncio.run()` で async 関数を Celery タスク内から呼ぶ
+- **理由**: Celery ワーカーは同期コンテキスト、SQLAlchemy は async → ブリッジが必要
+- **注意**: 1タスク1イベントループが保証される構成。Python 3.10+ では問題なし
+
+### LLM リトライ戦略
+- **決定**: `tenacity` を使わず stdlib `asyncio.sleep` で指数バックオフを自前実装
+- **理由**: 依存ライブラリを増やさない。最大3回・2s→4s のシンプルな実装で十分
+- **適用箇所**: `extractor.py`（学び抽出）と `digest_generator.py`（週報生成）で共通パターン
+
+### LLM プロバイダ疎結合化
+- **決定**: `BaseLLMProvider` に `generate_text(system_prompt, user_message) -> str` を追加
+- **理由**: `digest_generator.py` が `isinstance(provider, AnthropicProvider)` で内部実装に依存していた。抽象メソッド化で解消
+- **結果**: `digest_generator.py` が provider の実装詳細を知らなくて済む
+
+### WeeklyDigest のユーザースコープ
+- **決定**: `weekly_digests` に `user_id` FK を追加し、既存レコードとの重複チェックも `user_id` でフィルタ
+- **理由**: Phase 6 で認証を入れたが、週報だけユーザースコープが抜けていた
+- **移行**: Migration 0002 でカラム追加。既存レコードは `user_id=NULL`（後方互換）
+
+### Webhook 冪等性の実装位置
+- **決定**: `pr_processor.py` の DB commit 直後に `pr.processed` チェックを追加
+- **理由**: upsert 後にフラグを確認することで「同じPRへの再 Webhook」を安全にスキップ
+- **トレードオフ**: 意図的な再解析は `/pull-requests/{id}/reanalyze` エンドポイントで対応
+
+---
+
 ## 将来見直すポイント
 - Ollama でどこまで品質が出るか
-- Celery のままで十分か
+- Celery のままで十分か（Temporal への移行検討）
 - PostgreSQL だけで検索が足りるか
 - チーム利用に広げるべきか、個人特化の方が良いか
+- `pytest-asyncio` の `asyncio_mode=auto` 設定でテストを簡略化できるか
 
 ---
 

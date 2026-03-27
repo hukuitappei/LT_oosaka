@@ -306,12 +306,24 @@ MVPでは GitHub PR を入力にして、レビューコメントと修正履歴
 - digest 生成
 - UI実装
 
-### Phase 6: 任意の拡張
-- 学び一覧の検索
-- 再分析導線
-- provider 切替
+### Phase 6: 認証・マイグレーション・UI強化
+- ユーザー認証（メール/パスワード + JWT）
+- Alembic マイグレーション基盤
+- ユーザースコープ API（repositories / learning_items / weekly_digests）
+- NavBar・ログイン画面・ダッシュボード UI
 
-### Phase 6 に入る条件
+### Phase 7: 信頼性・ユーザースコープ完成・テスト
+- **Celery タスク実装**: `extract_pr_task` / `generate_digest_task`（各3回リトライ）
+- **DB マイグレーション自動化**: コンテナ起動時に `alembic upgrade head`
+- **Webhook 冪等性**: `pr.processed=True` チェックで重複抽出をスキップ
+- **LLM リトライ**: 最大3回・指数バックオフ（2s→4s）
+- **WeeklyDigest ユーザー紐付け**: `user_id` FK追加 + Migration 0002
+- **LLM プロバイダ疎結合化**: `BaseLLMProvider.generate_text()` 抽象メソッド、`isinstance` チェック除去
+- **フロントエンド**: NavBar にメールアドレス表示、ログイン時メール保存、グローバルエラーバウンダリ、null 安全 API 呼び出し
+- **テストスイート**: test_preprocessor / test_extractor / test_learning_saver / test_pr_processor / test_digest_generator (28 テスト)
+- **README.md** 新規作成（セットアップ手順・GitHub App 設定・API 一覧）
+
+### Phase 6 に入る条件（旧）
 - Phase 5 までで個人ツールとして日常利用できる
 - `learning_items` の品質に手応えがある
 - 週報が実際に振り返りで使える
