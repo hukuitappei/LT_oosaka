@@ -1,226 +1,82 @@
-# 試行錯誤を知識に変える週報AI 意思決定ログ
+# Decision Log
 
-## このメモの目的
-実装計画だけでなく、技術選定の理由や壁打ちの過程も残す。  
-後から「なぜこの構成にしたのか」「何を捨てたのか」を振り返れる状態を作る。
+## Current Project Direction
 
----
+This file records the decisions that are still active in the codebase. It is intentionally shorter than a historical design journal.
 
-## いまの前提
-- 5分LTで語れる思想があること
-- 単発デモではなく、あとで実プロダクトに育てやすいこと
-- AIが人を採点する方向ではなく、学びの再利用を支援する方向であること
-- GitHub PR を最初の入力ソースにすること
+## Decision 1: Workspace Is the Ownership Boundary
 
----
+- Status: active
+- Decision: repositories, learning items, and weekly digests are owned by `workspace`
+- Reason: the product already uses workspace-aware dependencies and membership checks
+- Consequence: `user` should be treated as the actor, not the primary data owner
 
-## 壁打ちで固まった思想
+Affected areas:
 
-### 1. 主題は「AIがすごい」ではない
-- AIに実装を任せること自体は普通になっていく
-- そのとき人間側に何が残るかが問題
-- 残すべきなのは完成コードではなく、途中の詰まり、失敗、判断の履歴
+- `api/app/dependencies.py`
+- `api/app/routers/workspaces.py`
+- `api/app/routers/weekly_digests.py`
+- `api/app/services/digest_generator.py`
 
-### 2. 人を評価しない
-- 市場価値の採点や能力判定には寄せない
-- 失敗を笑いものにしない
-- 学びを次回の行動に変える支援として設計する
+## Decision 2: Heavy Background Work Uses Celery
 
-### 3. 最初の対象は個人開発者
-- チーム全体の知識基盤まで広げるとスコープが重い
-- 個人の振り返りと再利用に絞る方がMVPとして成立しやすい
+- Status: active
+- Decision: webhook extraction, digest generation, and PR reanalysis should run through Celery
+- Reason: retry, failure visibility, and operational consistency are better than request-local background execution
+- Consequence: FastAPI routes should enqueue work instead of executing heavy tasks inline
 
----
+Affected areas:
 
-## 技術スタックの意思決定
+- `api/app/tasks/extract.py`
+- `api/app/routers/pull_requests.py`
+- `api/app/celery_app.py`
 
-## フロントエンド
+## Decision 3: LLM Providers Must Share a Common Contract
 
-### 採用: Next.js
-- 継続利用前提の UI を作りやすい
-- ダッシュボード、週報一覧、詳細画面など複数画面を自然に扱える
-- 将来、認証や検索、共有導線を足しやすい
+- Status: active
+- Decision: providers implement `BaseLLMProvider`, including `generate_text`
+- Reason: digest generation should not depend on provider-specific type checks
+- Consequence: provider switching stays inside the provider layer
 
-### 採用しなかった案: Streamlit
-- 最初のLT用デモには向いている
-- ただし、継続利用、複数画面、認証、状態管理、将来のプロダクト化では弱い
-- 今回は「すぐ見せる」より「育てる」を優先した
+Affected areas:
 
----
+- `api/app/llm/base.py`
+- `api/app/llm/anthropic_provider.py`
+- `api/app/llm/ollama_provider.py`
+- `api/app/services/digest_generator.py`
 
-## バックエンド
+## Decision 4: Tests Should Follow Contracts, Not Internal Call Details
 
-### 採用: FastAPI
-- API中心の構成に向いている
-- 型付きスキーマと Python のデータ処理相性が良い
-- GitHub連携、LLM呼び出し、バリデーション層を分けやすい
+- Status: active
+- Decision: tests should validate observable behavior and data contracts rather than fragile mock call counts
+- Reason: recent failures came from outdated assumptions, not from core feature regressions
+- Consequence: service and router tests should remain resilient to internal refactors
 
-### 採用しなかった案: Next.js 単独での完結
-- フロントとAPIを一体化できる利点はある
-- ただし、Webhook、非同期処理、LLMジョブ、データ処理の責務が重くなる
-- 今回はワーカー分離前提なので API 専用バックエンドを持つ方が自然
+Affected areas:
 
----
+- `api/tests/test_digest_generator.py`
+- `api/tests/test_learning_saver.py`
+- `api/tests/test_pr_processor.py`
+- `api/tests/test_preprocessor.py`
+- `api/tests/test_webhook_and_digest.py`
 
-## データベース
+## Decision 5: CI Is the Minimum Quality Gate
 
-### 採用: PostgreSQL
-- PR、コメント、抽出した学び、週報を正規化して保存しやすい
-- JSONB や全文検索など拡張余地が広い
-- 後から検索や集計に寄せても破綻しにくい
+- Status: active
+- Decision: every change should at least pass backend tests and frontend production build
+- Reason: these two checks catch the majority of current breakage modes
+- Consequence: CI is required before trusting documentation or merge readiness
 
-### 採用しなかった案: SQLite
-- MVPには十分なことも多い
-- ただし Webhook、ワーカー、複数プロセス、将来の本番運用を考えると早めに卒業が必要になる
-- 今回は最初から PostgreSQL に寄せる方が移行コストが小さい
+Affected areas:
 
----
+- `.github/workflows/ci.yml`
+- `api/`
+- `web/`
 
-## 非同期処理
+## Known Transitional State
 
-### 採用: Redis + Celery
-- Webhook受信と重い処理を分離できる
-- PR解析や週報生成は非同期の方が自然
-- Python中心のスタックに揃えやすい
+These are acknowledged but not yet fully resolved:
 
-### 採用しなかった案: 同期処理のみ
-- 最初は簡単
-- ただし GitHubイベント受信時に LLM 処理まで同期で抱えると失敗しやすい
-- リトライや再処理も扱いづらい
-
-### 保留案: Temporal
-- 将来的には良い
-- ただし最初から入れると構成が重い
-- まずは Celery で十分
-
----
-
-## GitHub連携
-
-### 採用: GitHub App
-- 権限管理が明確
-- Webhook を自然に受けられる
-- 個人アクセストークンよりもプロダクトとして健全
-
-### 採用しなかった案: Personal Access Token
-- 試作は速い
-- ただし配布性、権限の細かさ、ユーザー導入時の自然さで劣る
-- 実プロダクトとして考えるなら GitHub App が妥当
-
----
-
-## LLM
-
-### 第一候補: Ollama
-- ローカルLLMで運用コストを抑えたい
-- 学び抽出や週報生成は、工夫すればローカルでも成立する可能性がある
-- provider 抽象化を入れておけばクラウドLLMへ逃がせる
-
-### ここでの判断
-- 最初からクラウドLLM固定にはしない
-- ただし、品質不足の可能性は前提に置く
-- そのため、設計上は provider 切替可能にする
-
-### 採用しなかった案: LangChain前提
-- 便利な場面はある
-- ただし、今回必要なのはワークフローよりも「構造化出力の安定」と「保存前検証」
-- まずは自前の薄い抽象化で十分
-
----
-
-## フォーマット設計
-
-### 採用: versioned JSON schema
-- 出力を Markdown にしない
-- `schema_version` を必須にする
-- Pydantic で検証してから保存する
-- DBモデルとLLM出力モデルは分ける
-
-### この判断にした理由
-- 運用の中で項目を増やしたくなる
-- そのたびに prompt だけで壊すのではなく、契約として扱いたい
-- 将来の再分析や provider 変更にも強い
-
----
-
-## MVPスコープの意思決定
-
-### 入れるもの
-- GitHub PR
-- レビューコメント
-- 修正履歴
-- 学び抽出
-- 週報生成
-
-### 入れないもの
-- Issue
-- commit 単独分析
-- ローカル作業ログ
-- Slack
-- チーム共有
-
-### 理由
-- PRは入力ソースとして明確
-- レビューコメントが「自分では気づかなかった視点」になりやすい
-- 5分LTでも説明しやすい
-
----
-
-## 今の想定壁
-
-### 1. ローカルLLMの品質
-- 長いPRやレビューの文脈を捌ききれない可能性がある
-- 対策は前処理と provider 切替
-
-### 2. ノイズの多いレビュー
-- コメントが学びに直結しないケースがある
-- 指摘を粒度調整する前処理が必要
-
-### 3. 同一PRへのイベント多発
-- Webhook が多重に飛ぶ
-- idempotency と再処理設計が必要
-
----
-
----
-
-## Phase 7 の追加意思決定
-
-### Celery タスク設計
-- **決定**: `asyncio.run()` で async 関数を Celery タスク内から呼ぶ
-- **理由**: Celery ワーカーは同期コンテキスト、SQLAlchemy は async → ブリッジが必要
-- **注意**: 1タスク1イベントループが保証される構成。Python 3.10+ では問題なし
-
-### LLM リトライ戦略
-- **決定**: `tenacity` を使わず stdlib `asyncio.sleep` で指数バックオフを自前実装
-- **理由**: 依存ライブラリを増やさない。最大3回・2s→4s のシンプルな実装で十分
-- **適用箇所**: `extractor.py`（学び抽出）と `digest_generator.py`（週報生成）で共通パターン
-
-### LLM プロバイダ疎結合化
-- **決定**: `BaseLLMProvider` に `generate_text(system_prompt, user_message) -> str` を追加
-- **理由**: `digest_generator.py` が `isinstance(provider, AnthropicProvider)` で内部実装に依存していた。抽象メソッド化で解消
-- **結果**: `digest_generator.py` が provider の実装詳細を知らなくて済む
-
-### WeeklyDigest のユーザースコープ
-- **決定**: `weekly_digests` に `user_id` FK を追加し、既存レコードとの重複チェックも `user_id` でフィルタ
-- **理由**: Phase 6 で認証を入れたが、週報だけユーザースコープが抜けていた
-- **移行**: Migration 0002 でカラム追加。既存レコードは `user_id=NULL`（後方互換）
-
-### Webhook 冪等性の実装位置
-- **決定**: `pr_processor.py` の DB commit 直後に `pr.processed` チェックを追加
-- **理由**: upsert 後にフラグを確認することで「同じPRへの再 Webhook」を安全にスキップ
-- **トレードオフ**: 意図的な再解析は `/pull-requests/{id}/reanalyze` エンドポイントで対応
-
----
-
-## 将来見直すポイント
-- Ollama でどこまで品質が出るか
-- Celery のままで十分か（Temporal への移行検討）
-- PostgreSQL だけで検索が足りるか
-- チーム利用に広げるべきか、個人特化の方が良いか
-- `pytest-asyncio` の `asyncio_mode=auto` 設定でテストを簡略化できるか
-
----
-
-## 現時点のひとことで言うと
-AIに実装を任せる時代に、完成物ではなく試行錯誤を知識として残すための、個人向け週報システムを作る。そのための構成として、Next.js + FastAPI + PostgreSQL + Redis + Celery + GitHub App + Ollama を選んだ。
+- `WeeklyDigest.user_id` still exists in the schema, but active digest behavior is workspace-scoped
+- some service and query logic is still spread across routers and services
+- Docker Compose was not verified in the latest environment because Docker was unavailable there
