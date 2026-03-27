@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+    "start:e2e": "next start --hostname 127.0.0.1 --port 3100",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "dev:e2e": "next dev --hostname 127.0.0.1 --port 3000",
+    "mock-api:e2e": "node e2e/mock-api-server.mjs",
+    "stack:e2e": "node e2e/start-stack.mjs",
+    "test:e2e": "node e2e/run-playwright.mjs",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "next": "^15.5.14",
@@ -14,6 +20,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

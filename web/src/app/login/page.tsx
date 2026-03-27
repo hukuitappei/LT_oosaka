@@ -75,6 +75,7 @@ export default function LoginPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-200">メールアドレス</label>
             <input
+              data-testid="login-email"
               type="email"
               required
               value={email}
@@ -86,6 +87,7 @@ export default function LoginPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-200">パスワード</label>
             <input
+              data-testid="login-password"
               type="password"
               required
               value={password}
@@ -99,6 +101,7 @@ export default function LoginPage() {
           {error && <p className="text-sm text-red-400">{error}</p>}
 
           <button
+            data-testid="login-submit"
             type="submit"
             disabled={loading}
             className="w-full rounded-xl bg-amber-300 py-2 text-sm font-medium text-stone-950 transition-colors hover:bg-amber-200 disabled:opacity-50"

@@ -4,6 +4,8 @@ __pycache__/
 *.db
 web/node_modules/
 web/.next/
+web/playwright-report/
+web/test-results/
 .pytest_cache/
 pytest-cache-files-*/
 .codex_sync_backup_*/

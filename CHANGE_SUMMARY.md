@@ -28,6 +28,8 @@
 ## テストと品質ゲート
 
 - frontend CI に `npm run lint` を追加し、その後に `npm run build` を実行する構成へ変更
+- frontend に Playwright ベースの最小 browser E2E を追加
+- mock API server を使う browser E2E の起動導線を追加
 - backend テストを責務ごとに分割
 - webhook 契約テストを独立
 - PR reanalyze の router/service テストを分離
@@ -38,8 +40,10 @@
 
 ## 現在の検証状況
 
-- backend: `pytest -q api` で `77 passed`
-- frontend CI: `npm run lint` の後に `npm run build`
+- backend: `pytest -q api` で `86 passed`
+- frontend: `npm run lint`
+- frontend: `npm run test:e2e`
+- frontend CI: `npm run lint`、`npm run build`、browser E2E
 
 ## 現在の方針
 

@@ -70,6 +70,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - auth session and GitHub OAuth completion moved behind service APIs
 - repository and learning item queries moved behind service APIs
 - API-level end-to-end flow added for register/login/workspace/learning-items/digest
+- Playwright-based browser E2E smoke flow added for authenticated navigation
 - backend tests updated to current contracts
 
 ## Current Architecture Direction
@@ -108,7 +109,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 
 1. Continue moving remaining route-owned query/orchestration logic behind service APIs.
 2. Review remaining routers for mixed query logic after the repository and learning item cleanup.
-3. Decide whether to keep E2E coverage at the API layer or add browser-level coverage later.
+3. Expand browser E2E beyond the initial smoke path without making the suite brittle.
 
 ### Medium Priority
 
