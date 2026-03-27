@@ -74,6 +74,18 @@ cd api
 celery -A app.celery_app worker --loglevel=info
 ```
 
+Demo data:
+
+```bash
+cd api
+python scripts/seed_demo_data.py
+```
+
+This creates a loginable demo account:
+
+- Email: `demo@example.com`
+- Password: `demo12345`
+
 ## Testing
 
 Backend:
