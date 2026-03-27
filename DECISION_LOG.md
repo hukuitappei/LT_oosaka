@@ -119,12 +119,17 @@ Affected areas:
 - `api/app/services/weekly_digests.py`
 - `api/app/routers/workspaces.py`
 - `api/app/services/workspaces.py`
+- `api/app/routers/auth.py`
+- `api/app/services/user_sessions.py`
+- `api/app/services/github_oauth.py`
 - `api/tests/test_pull_requests_reanalyze.py`
 - `api/tests/test_pull_requests_service.py`
 - `api/tests/test_weekly_digests_router.py`
 - `api/tests/test_weekly_digests_service.py`
 - `api/tests/test_workspaces_router.py`
 - `api/tests/test_workspaces_service.py`
+- `api/tests/test_auth_router.py`
+- `api/tests/test_auth.py`
 
 ## Known Transitional State
 
