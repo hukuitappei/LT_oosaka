@@ -1,7 +1,15 @@
 import Link from "next/link"
 import { api } from "@/lib/api"
 import { getRequestContextHeaders } from "@/lib/request-context"
-import { CATEGORY_LABELS } from "@/lib/learning-item-labels"
+
+const CATEGORY_LABELS: Record<string, string> = {
+  security: "セキュリティ",
+  performance: "パフォーマンス",
+  design: "設計",
+  testing: "テスト",
+  code_quality: "コード品質",
+  other: "その他",
+}
 
 export default async function Home() {
   const requestHeaders = await getRequestContextHeaders()
@@ -14,7 +22,7 @@ export default async function Home() {
     return (
       <main className="mx-auto min-h-screen max-w-4xl p-8">
         <h1 className="mb-1 text-3xl font-bold">PR Knowledge Hub</h1>
-        <p className="mb-8 text-gray-500">レビューの知見を次の実装へつなげるダッシュボード</p>
+        <p className="mb-8 text-gray-500">レビューの知見を、次回の判断に使えるダッシュボードです。</p>
         <p className="py-8 text-center text-gray-500">
           データを取得できませんでした。ログイン状態と API 接続を確認してください。
         </p>
@@ -39,53 +47,52 @@ export default async function Home() {
         <div className="grid gap-8 lg:grid-cols-[1.4fr_0.8fr]">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
-              Review Intelligence
+              ダッシュボード
             </p>
             <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-white md:text-5xl">
-              PRレビューの指摘を、
-              <br />
-              次の実装で使える学びへ変える
+              PRレビューの指摘を、<br />
+              次回の判断に使える学びへ変える
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
-              レビューコメントを整理し、次回に再利用できるアクションへ落とし込みます。
-              Weekly Digest では、その週に蓄積された学びを振り返れます。
+              レビューコメントを整理して、学びを実装や設計の改善に落とし込みます。
+              週次ダイジェストでは、その週に増えた学びを振り返れます。
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/learning-items"
                 className="rounded-full bg-amber-300 px-5 py-3 text-sm font-medium text-stone-950 transition-transform hover:-translate-y-0.5"
               >
-                学びを確認する
+                学びを見る
               </Link>
               <Link
                 href="/weekly-digests"
                 className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
               >
-                Weekly Digest を見る
+                週次ダイジェストを見る
               </Link>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            <StatCard label="学びの総数" value={items?.length ?? 0} />
-            <StatCard label="最新 Digest の件数" value={latestDigest?.learning_count ?? 0} />
-            <StatCard label="Digest 数" value={digests?.length ?? 0} />
+            <StatCard label="学びの件数" value={items?.length ?? 0} />
+            <StatCard label="最新ダイジェストの学び数" value={latestDigest?.learning_count ?? 0} />
+            <StatCard label="ダイジェスト件数" value={digests?.length ?? 0} />
           </div>
         </div>
       </section>
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
         <InsightCard
-          title="レビューの再利用"
-          body="レビューで見つかった知見を PR ごとに終わらせず、次の実装で使える形へ残します。"
+          title="学びの活用"
+          body="レビューで見つかった課題を PR ごとに整理し、次の実装で使える形にします。"
         />
         <InsightCard
-          title="次につなげる"
-          body="学びは evidence と next action に分けて保存し、次回の判断材料にします。"
+          title="次回につなげる"
+          body="学びは根拠と次回アクションに分けて保存し、再発防止と共有をしやすくします。"
         />
         <InsightCard
-          title="傾向を把握する"
-          body="カテゴリ別の偏りや繰り返し出る論点を Digest でまとめて確認できます。"
+          title="傾向を読む"
+          body="カテゴリごとの件数を見て、今どこで学びが多いかを週次ダイジェストで把握できます。"
         />
       </section>
 
@@ -94,7 +101,7 @@ export default async function Home() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-white">最新の学び</h2>
-              <p className="text-sm text-stone-400">レビュー指摘から抽出された最近のアクション</p>
+              <p className="text-sm text-stone-400">レビューから抽出された直近のアクションです。</p>
             </div>
             <Link href="/learning-items" className="text-sm text-amber-300 hover:text-amber-200">
               すべて見る
@@ -102,7 +109,7 @@ export default async function Home() {
           </div>
 
           {!latestItems.length ? (
-            <p className="text-sm text-stone-400">学びはまだありません。</p>
+            <p className="text-sm text-stone-400">まだ学びはありません。</p>
           ) : (
             <div className="space-y-4">
               {latestItems.map((item) => (
@@ -118,11 +125,11 @@ export default async function Home() {
                   </p>
                   <p className="mb-3 text-sm leading-6 text-stone-300">{item.detail}</p>
                   <div className="mb-3 rounded-2xl border border-amber-300/15 bg-amber-300/10 p-3">
-                    <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">Evidence</p>
+                    <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">根拠</p>
                     <p className="text-sm text-stone-200">{item.evidence}</p>
                   </div>
                   <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 p-3">
-                    <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-sky-200/80">Next Action</p>
+                    <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-sky-200/80">次回アクション</p>
                     <p className="text-sm text-stone-100">{item.action_for_next_time}</p>
                   </div>
                   <a
@@ -144,13 +151,13 @@ export default async function Home() {
             <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold text-white">最新 Digest</h2>
+                  <h2 className="text-xl font-semibold text-white">最新の週次ダイジェスト</h2>
                   <p className="text-sm text-stone-400">
                     {latestDigest.year}年 第{latestDigest.week}週
                   </p>
                 </div>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-stone-300">
-                  {latestDigest.learning_count} items
+                  {latestDigest.learning_count}件
                 </span>
               </div>
               <p className="mb-4 text-sm leading-6 text-stone-300">{latestDigest.summary}</p>
@@ -158,7 +165,7 @@ export default async function Home() {
                 href={`/weekly-digests/${latestDigest.id}`}
                 className="text-sm text-amber-300 hover:text-amber-200"
               >
-                Digest の詳細を見る
+                ダイジェストの詳細を見る
               </Link>
             </section>
           )}
@@ -183,7 +190,7 @@ export default async function Home() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-stone-400">カテゴリ集計の対象データはまだありません。</p>
+              <p className="text-sm text-stone-400">まだカテゴリ別の学びはありません。</p>
             )}
           </section>
         </div>

@@ -10,13 +10,13 @@ export default async function WeeklyDigestsPage() {
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/" className="text-sm text-stone-400 hover:text-stone-200">
-          ← Dashboard
+          ← ダッシュボード
         </Link>
-        <h1 className="text-2xl font-semibold text-white">Weekly Digests</h1>
+        <h1 className="text-2xl font-semibold text-white">週次ダイジェスト</h1>
       </div>
 
       {!digests || digests.length === 0 ? (
-        <p className="text-stone-400">Weekly Digest はまだありません。</p>
+        <p className="text-stone-400">まだ週次ダイジェストはありません。</p>
       ) : (
         <div className="space-y-4">
           {digests.map((digest) => (
@@ -28,7 +28,7 @@ export default async function WeeklyDigestsPage() {
                   </span>
                   <div className="flex gap-3 text-xs text-stone-400">
                     <span>PR {digest.pr_count}件</span>
-                    <span>Items {digest.learning_count}件</span>
+                    <span>学び {digest.learning_count}件</span>
                   </div>
                 </div>
                 <p className="line-clamp-2 text-sm leading-6 text-stone-300">{digest.summary}</p>

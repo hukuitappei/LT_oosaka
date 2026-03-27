@@ -11,14 +11,14 @@ export default async function LearningItemsPage() {
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/" className="text-sm text-stone-400 hover:text-stone-200">
-          ← Dashboard
+          ホーム
         </Link>
-        <h1 className="text-2xl font-semibold text-white">Learning Items</h1>
+        <h1 className="text-2xl font-semibold text-white">学び一覧</h1>
         <span className="ml-auto text-sm text-stone-500">{items?.length ?? 0}件</span>
       </div>
 
       {!items || items.length === 0 ? (
-        <p className="text-stone-400">学びはまだありません。</p>
+        <p className="text-stone-400">まだ学びはありません。</p>
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
@@ -45,11 +45,11 @@ export default async function LearningItemsPage() {
               </div>
               <p className="mb-3 text-sm leading-6 text-stone-300">{item.detail}</p>
               <div className="mb-3 rounded-2xl border border-amber-300/15 bg-amber-300/10 p-3">
-                <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">Evidence</p>
+                <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">根拠</p>
                 <p className="text-sm text-stone-200">{item.evidence}</p>
               </div>
               <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 p-3">
-                <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-sky-200/80">Next Action</p>
+                <p className="mb-1 text-[11px] uppercase tracking-[0.22em] text-sky-200/80">次回アクション</p>
                 <p className="text-sm text-stone-100">{item.action_for_next_time}</p>
               </div>
             </div>

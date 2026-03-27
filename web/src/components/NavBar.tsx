@@ -34,10 +34,10 @@ export default function NavBar() {
           {authed && (
             <>
               <Link href="/weekly-digests" className="text-sm text-stone-300 transition-colors hover:text-white">
-                Weekly Digests
+                週次ダイジェスト
               </Link>
               <Link href="/learning-items" className="text-sm text-stone-300 transition-colors hover:text-white">
-                Learning Items
+                学び
               </Link>
             </>
           )}
