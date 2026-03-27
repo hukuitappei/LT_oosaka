@@ -4,7 +4,7 @@ import NavBar from "@/components/NavBar"
 
 export const metadata: Metadata = {
   title: "PR Knowledge Hub",
-  description: "PRレビューの指摘を、次回に再利用できる学びとして蓄積するツールです。",
+  description: "PRレビューの学びを週次で蓄積し、再利用できる知識として整理するツールです。",
 }
 
 export default function RootLayout({

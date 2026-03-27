@@ -20,7 +20,7 @@ export default async function WeeklyDigestDetailPage({
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/weekly-digests" className="text-sm text-stone-400 hover:text-stone-200">
-          ← 週次ダイジェスト
+          ← 週次ダイジェスト一覧
         </Link>
         <h1 className="text-2xl font-semibold text-white">
           {digest.year}年 第{digest.week}週のダイジェスト
@@ -43,7 +43,7 @@ export default async function WeeklyDigestDetailPage({
           <ul className="space-y-1">
             {digest.repeated_issues.map((issue, index) => (
               <li key={index} className="flex gap-2 text-sm text-stone-300">
-                <span className="mt-0.5 text-amber-300">・</span>
+                <span className="mt-0.5 text-amber-300">•</span>
                 {issue}
               </li>
             ))}
@@ -57,7 +57,7 @@ export default async function WeeklyDigestDetailPage({
           <ul className="space-y-1">
             {digest.next_time_notes.map((note, index) => (
               <li key={index} className="flex gap-2 text-sm text-stone-300">
-                <span className="mt-0.5 text-sky-300">・</span>
+                <span className="mt-0.5 text-sky-300">•</span>
                 {note}
               </li>
             ))}
