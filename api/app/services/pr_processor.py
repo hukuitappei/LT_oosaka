@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import GitHubConnection, PullRequest, Repository, Workspace, WorkspaceMember
+from app.llm import get_default_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,17 @@ def _build_pr_dict_from_payload(
     }
 
 
+def _webhook_context(payload: dict[str, Any]) -> dict[str, Any]:
+    repo_data = payload.get("repository", {})
+    pr_data = payload.get("pull_request", {})
+    return {
+        "action": payload.get("action", ""),
+        "repo": repo_data.get("full_name", ""),
+        "pr_number": pr_data.get("number"),
+        "installation_id": payload.get("installation", {}).get("id"),
+    }
+
+
 async def _resolve_workspace_for_connection(
     db: AsyncSession,
     connection: GitHubConnection | None,
@@ -73,6 +85,15 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
     repo_data = payload.get("repository", {})
     pr_data = payload.get("pull_request", {})
     installation_id = payload.get("installation", {}).get("id")
+    context = _webhook_context(payload)
+
+    logger.info(
+        "process_pr_event received action=%s repo=%s pr_number=%s installation_id=%s",
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
 
     connection = None
     if installation_id:
@@ -86,8 +107,23 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
 
     workspace = await _resolve_workspace_for_connection(db, connection)
     if workspace is None:
-        logger.warning("Skipping webhook PR event because no workspace mapping was found")
+        logger.warning(
+            "Skipping webhook PR event because no workspace mapping was found action=%s repo=%s pr_number=%s installation_id=%s",
+            context["action"],
+            context["repo"],
+            context["pr_number"],
+            context["installation_id"],
+        )
         return
+
+    logger.info(
+        "process_pr_event resolved workspace workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        workspace.id,
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
 
     repo = await db.scalar(
         select(Repository).where(
@@ -135,27 +171,40 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
     await db.refresh(pr)
 
     if pr.processed:
-        logger.info("PR #%d already processed, skipping extraction", pr.github_pr_number)
+        logger.info(
+            "PR already processed, skipping extraction workspace_id=%d repo=%s pr_number=%d installation_id=%s",
+            workspace.id,
+            context["repo"],
+            pr.github_pr_number,
+            context["installation_id"],
+        )
         return
 
     if not settings.anthropic_api_key and not settings.ollama_base_url:
+        logger.info(
+            "Skipping extraction because no LLM provider is configured workspace_id=%d repo=%s pr_number=%d installation_id=%s",
+            workspace.id,
+            context["repo"],
+            pr.github_pr_number,
+            context["installation_id"],
+        )
         return
 
     try:
+        logger.info(
+            "process_pr_event starting extraction workspace_id=%d repo=%s pr_number=%d installation_id=%s",
+            workspace.id,
+            context["repo"],
+            pr.github_pr_number,
+            context["installation_id"],
+        )
         review_comments = await _fetch_review_comments(payload, repo_data, pr_data)
         pr_dict = _build_pr_dict_from_payload(pr_data, repo_data, review_comments)
 
         from app.services.extractor import extract_from_pr
         from app.services.learning_saver import save_learning_items
 
-        if settings.anthropic_api_key:
-            from app.llm.anthropic_provider import AnthropicProvider
-
-            provider = AnthropicProvider(api_key=settings.anthropic_api_key)
-        else:
-            from app.llm.ollama_provider import OllamaProvider
-
-            provider = OllamaProvider(host=settings.ollama_base_url)
+        provider = get_default_llm_provider()
 
         result = await extract_from_pr(pr_dict, provider)
         await save_learning_items(
@@ -165,13 +214,21 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
             created_by_user_id=connection.user_id if connection else None,
         )
         logger.info(
-            "Extracted %d learning items for workspace=%d PR #%d",
+            "Extracted %d learning items workspace_id=%d repo=%s pr_number=%d installation_id=%s",
             len(result.learning_items),
             workspace.id,
+            context["repo"],
             pr.github_pr_number,
+            context["installation_id"],
         )
     except Exception:
-        logger.exception("Learning extraction failed for PR #%d", pr_data.get("number"))
+        logger.exception(
+            "Learning extraction failed workspace_id=%d repo=%s pr_number=%s installation_id=%s",
+            workspace.id,
+            context["repo"],
+            context["pr_number"],
+            context["installation_id"],
+        )
 
 
 async def _fetch_review_comments(
@@ -195,5 +252,10 @@ async def _fetch_review_comments(
         owner, repo_name = repo_data["full_name"].split("/")
         return await client.get_review_comments(owner, repo_name, pr_data["number"])
     except Exception:
-        logger.exception("Failed to fetch review comments from GitHub API")
+        logger.exception(
+            "Failed to fetch review comments from GitHub API repo=%s pr_number=%s installation_id=%s",
+            repo_data.get("full_name", ""),
+            pr_data.get("number"),
+            payload.get("installation", {}).get("id"),
+        )
         return []

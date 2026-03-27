@@ -1,3 +1,4 @@
+import logging
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -71,6 +72,43 @@ async def test_call_llm_for_digest_fallback_after_all_retries_fail(mock_llm_prov
 
 
 @pytest.mark.asyncio
+async def test_call_llm_for_digest_logs_context_on_failure(mock_llm_provider, caplog):
+    from app.services.digest_generator import _call_llm_for_digest
+
+    mock_llm_provider.generate_text = AsyncMock(side_effect=ConnectionError("Always fails"))
+
+    with patch("app.services.digest_generator.asyncio.sleep", new_callable=AsyncMock):
+        with caplog.at_level(logging.WARNING):
+            result = await _call_llm_for_digest(
+                "fallback prompt text",
+                mock_llm_provider,
+                workspace_id=5,
+                year=2026,
+                week=12,
+                item_count=3,
+            )
+
+    assert isinstance(result, dict)
+    assert result["summary"].startswith("fallback prompt text")
+    assert any(
+        "Digest LLM attempt 1/3 failed" in record.message
+        and "workspace_id=5" in record.message
+        and "year=2026" in record.message
+        and "week=12" in record.message
+        and "item_count=3" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "Digest LLM failed after 3 attempts" in record.message
+        and "workspace_id=5" in record.message
+        and "year=2026" in record.message
+        and "week=12" in record.message
+        and "item_count=3" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_generate_weekly_digest_saves_to_db():
     from app.services.digest_generator import generate_weekly_digest
 
@@ -117,3 +155,16 @@ async def test_generate_weekly_digest_updates_existing():
     assert added_objects == []
     assert existing_digest.summary != "old summary"
     assert digest is existing_digest
+
+
+def test_weekly_digest_model_does_not_expose_legacy_user_id():
+    from app.db.models import WeeklyDigest
+
+    digest = WeeklyDigest(
+        workspace_id=1,
+        year=2026,
+        week=1,
+        summary="summary",
+    )
+
+    assert not hasattr(digest, "user_id")

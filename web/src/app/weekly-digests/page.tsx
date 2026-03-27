@@ -16,7 +16,7 @@ export default async function WeeklyDigestsPage() {
       </div>
 
       {!digests || digests.length === 0 ? (
-        <p className="text-stone-400">Digest がまだありません。</p>
+        <p className="text-stone-400">Weekly Digest はまだありません。</p>
       ) : (
         <div className="space-y-4">
           {digests.map((digest) => (

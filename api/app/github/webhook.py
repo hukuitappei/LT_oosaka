@@ -1,14 +1,16 @@
 import hashlib
 import hmac
 import logging
+
 from fastapi import HTTPException, Request
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 async def verify_signature(request: Request) -> bytes:
-    """GitHub Webhook の署名を検証して body を返す"""
+    """Verify the GitHub webhook signature and return the raw request body."""
     body = await request.body()
     sig_header = request.headers.get("X-Hub-Signature-256", "")
 

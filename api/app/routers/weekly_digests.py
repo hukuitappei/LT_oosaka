@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.db.models import User, WeeklyDigest, Workspace
 from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.llm import get_default_llm_provider
 
 router = APIRouter(prefix="/weekly-digests", tags=["weekly-digests"])
 
@@ -97,16 +97,10 @@ async def generate_digest(
     year = request.year or today.isocalendar()[0]
     week = request.week or today.isocalendar()[1]
 
-    if settings.anthropic_api_key:
-        from app.llm.anthropic_provider import AnthropicProvider
-
-        provider = AnthropicProvider(api_key=settings.anthropic_api_key)
-    elif settings.ollama_base_url:
-        from app.llm.ollama_provider import OllamaProvider
-
-        provider = OllamaProvider(host=settings.ollama_base_url)
-    else:
-        raise HTTPException(status_code=400, detail="No LLM provider configured")
+    try:
+        provider = get_default_llm_provider()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     from app.services.digest_generator import generate_weekly_digest
 

@@ -66,6 +66,7 @@ Affected areas:
 - Decision: every change should at least pass backend tests and frontend production build
 - Reason: these two checks catch the majority of current breakage modes
 - Consequence: CI is required before trusting documentation or merge readiness
+- Additional note: the `web` job now runs `npm run lint` before `npm run build`
 
 Affected areas:
 
@@ -73,10 +74,37 @@ Affected areas:
 - `api/`
 - `web/`
 
+## Decision 6: Fixture Analysis Stays Out Of The Main App
+
+- Status: active
+- Decision: fixture-backed PR analysis routes should not be mounted in `app.main:app`
+- Reason: they are useful for local inspection, but they are not part of the production user flow
+- Consequence: fixture samples remain available for tests and ad hoc development, but the main startup path stays focused on the real product surface
+
+Affected areas:
+
+- `api/app/main.py`
+- `api/app/routers/analyze.py`
+- `api/fixtures/`
+- `api/tests/test_main_app.py`
+
+## Decision 7: Background Work Uses Structured Context Logs
+
+- Status: active
+- Decision: webhook ingestion, Celery tasks, and digest generation should log stable identifiers for tracing
+- Reason: failures are easier to triage when `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week` are emitted consistently
+- Consequence: operational logs should stay structured and avoid ad hoc wording that hides the important identifiers
+
+Affected areas:
+
+- `api/app/routers/webhook.py`
+- `api/app/tasks/extract.py`
+- `api/app/services/pr_processor.py`
+- `api/app/services/digest_generator.py`
+
 ## Known Transitional State
 
 These are acknowledged but not yet fully resolved:
 
-- `WeeklyDigest.user_id` still exists in the schema, but active digest behavior is workspace-scoped
 - some service and query logic is still spread across routers and services
 - Docker Compose was not verified in the latest environment because Docker was unavailable there

@@ -12,6 +12,7 @@ The project is past the initial MVP stage. The current codebase supports:
 - Celery-based async jobs
 - a working Next.js frontend
 - backend tests and frontend production build checks
+- structured tracing logs for webhook, Celery, and digest workflows
 
 ## Completed Milestones
 
@@ -26,6 +27,8 @@ The project is past the initial MVP stage. The current codebase supports:
 - fixture-based PR analysis flow
 - prompt building and LLM schema validation
 - learning item persistence
+
+Current status: the fixture-backed analysis path is retained as a development/testing aid, but it is not mounted in the main FastAPI app.
 
 ### Phase 3: GitHub Ingestion
 
@@ -77,20 +80,24 @@ The project is past the initial MVP stage. The current codebase supports:
 - webhook ingestion, digest generation, and PR reanalysis use Celery
 - heavy work should stay out of FastAPI request handlers
 
+### Development Surface
+
+- fixture-backed `/analyze` routes are excluded from `app.main:app`
+- `api/fixtures/` remains available for local inspection and tests
+
 ### Quality
 
 - backend quality gate: `pytest -q`
-- frontend quality gate: `npm run build`
+- frontend quality gate: `npm run lint` followed by `npm run build`
 - CI enforces both on push and pull request
 
 ## Remaining Work
 
 ### High Priority
 
-1. Remove or demote legacy `WeeklyDigest.user_id` usage completely.
-2. Introduce clearer service APIs for digest generation and PR ingestion.
-3. Reduce query logic duplication across routers and services.
-4. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
+1. Introduce clearer service APIs for digest generation and PR ingestion.
+2. Reduce query logic duplication across routers and services.
+3. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
 
 ### Medium Priority
 

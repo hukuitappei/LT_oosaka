@@ -208,7 +208,5 @@ class WeeklyDigest(Base):
     pr_count: Mapped[int] = mapped_column(Integer, default=0)
     learning_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="weekly_digests")
-    owner: Mapped["User | None"] = relationship("User")

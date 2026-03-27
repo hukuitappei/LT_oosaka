@@ -13,15 +13,14 @@ from app.llm.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
 
-DIGEST_SYSTEM_PROMPT = """あなたはソフトウェアエンジニアの週次振り返りアシスタントです。
-今週のPRレビューから抽出された学びを受け取り、週報としてまとめてください。
-
-以下のJSONスキーマに厳密に従って出力してください。Markdownやコードブロックは使わず、JSONのみ返してください。
+DIGEST_SYSTEM_PROMPT = """You are a weekly review assistant for software engineers.
+Read the provided learning items and return JSON only.
+Do not output Markdown or code blocks.
 
 {
-  "summary": "<今週の学びの全体サマリー（3〜5文）>",
-  "repeated_issues": ["<繰り返し出てきた詰まりパターン>"],
-  "next_time_notes": ["<来週の自分へのメモ>"]
+  "summary": "<2-4 sentences summarizing the week's learning>",
+  "repeated_issues": ["<recurring issues or patterns>"],
+  "next_time_notes": ["<specific notes for next time>"]
 }"""
 
 
@@ -53,19 +52,19 @@ async def fetch_learning_items_for_week(
 
 
 def _build_digest_prompt(items: list[LearningItem], year: int, week: int) -> str:
-    lines = [f"## {year}年 第{week}週の学び ({len(items)}件)", ""]
+    lines = [f"## {year} Week {week} learning items ({len(items)} items)", ""]
     by_category: dict[str, list[LearningItem]] = {}
     for item in items:
         by_category.setdefault(item.category, []).append(item)
 
     for category, cat_items in by_category.items():
-        lines.append(f"### {category} ({len(cat_items)}件)")
+        lines.append(f"### {category} ({len(cat_items)} items)")
         for item in cat_items:
             lines.append(f"- **{item.title}** (confidence: {item.confidence:.1f})")
-            lines.append(f"  次回アクション: {item.action_for_next_time}")
+            lines.append(f"  Next action: {item.action_for_next_time}")
         lines.append("")
 
-    lines.append("上記の学びをもとに週報を生成してください。")
+    lines.append("Summarize the weekly reflection based on the learning items above.")
     return "\n".join(lines)
 
 
@@ -77,13 +76,34 @@ async def generate_weekly_digest(
     db: AsyncSession,
 ) -> WeeklyDigest:
     items = await fetch_learning_items_for_week(year, week, workspace_id, db)
+    logger.info(
+        "generate_weekly_digest started workspace_id=%d year=%d week=%d item_count=%d",
+        workspace_id,
+        year,
+        week,
+        len(items),
+    )
 
     if not items:
-        summary = "今週はレビューから抽出された学びがありませんでした。"
+        summary = "No learning items were extracted from reviews this week yet."
         repeated_issues: list[str] = []
         next_time_notes: list[str] = []
     else:
-        raw_result = await _call_llm_for_digest(_build_digest_prompt(items, year, week), provider)
+        logger.info(
+            "generate_weekly_digest calling LLM workspace_id=%d year=%d week=%d item_count=%d",
+            workspace_id,
+            year,
+            week,
+            len(items),
+        )
+        raw_result = await _call_llm_for_digest(
+            _build_digest_prompt(items, year, week),
+            provider,
+            workspace_id=workspace_id,
+            year=year,
+            week=week,
+            item_count=len(items),
+        )
         summary = raw_result.get("summary", "")
         repeated_issues = raw_result.get("repeated_issues", [])
         next_time_notes = raw_result.get("next_time_notes", [])
@@ -118,12 +138,39 @@ async def generate_weekly_digest(
 
     await db.commit()
     await db.refresh(digest)
+    logger.info(
+        "generate_weekly_digest saved workspace_id=%d year=%d week=%d digest_id=%d pr_count=%d learning_count=%d",
+        workspace_id,
+        year,
+        week,
+        digest.id,
+        digest.pr_count,
+        digest.learning_count,
+    )
     return digest
 
 
-async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
+async def _call_llm_for_digest(
+    prompt: str,
+    provider: BaseLLMProvider,
+    *,
+    workspace_id: int | None = None,
+    year: int | None = None,
+    week: int | None = None,
+    item_count: int | None = None,
+) -> dict:
     max_retries = 3
     last_exc: Exception | None = None
+    context_bits = []
+    if workspace_id is not None:
+        context_bits.append(f"workspace_id={workspace_id}")
+    if year is not None:
+        context_bits.append(f"year={year}")
+    if week is not None:
+        context_bits.append(f"week={week}")
+    if item_count is not None:
+        context_bits.append(f"item_count={item_count}")
+    context_suffix = f" [{' '.join(context_bits)}]" if context_bits else ""
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -134,13 +181,14 @@ async def _call_llm_for_digest(prompt: str, provider: BaseLLMProvider) -> dict:
             if attempt < max_retries:
                 delay = 2.0 * (2 ** (attempt - 1))
                 logger.warning(
-                    "Digest LLM attempt %d/%d failed, retrying in %.1fs: %s",
+                    "Digest LLM attempt %d/%d failed%s, retrying in %.1fs: %s",
                     attempt,
                     max_retries,
+                    context_suffix,
                     delay,
                     exc,
                 )
                 await asyncio.sleep(delay)
 
-    logger.error("Digest LLM failed after %d attempts: %s", max_retries, last_exc)
+    logger.error("Digest LLM failed after %d attempts%s: %s", max_retries, context_suffix, last_exc)
     return {"summary": prompt[:200], "repeated_issues": [], "next_time_notes": []}

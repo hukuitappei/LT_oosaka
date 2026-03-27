@@ -43,7 +43,7 @@ export default function LoginPage() {
         </p>
         <h1 className="mb-2 text-center text-3xl font-semibold text-white">PR Knowledge Hub</h1>
         <p className="mb-6 text-center text-sm leading-6 text-stone-300">
-          PRレビューの指摘を、次回アクションとして蓄積する。
+          PRレビューの指摘を、次に活かせる学習項目として蓄積します。
         </p>
 
         <div className="mb-6 flex overflow-hidden rounded-xl border border-white/10">
@@ -91,7 +91,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-sm text-white placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              placeholder="8文字以上"
+              placeholder="8文字以上で入力"
               minLength={8}
             />
           </div>

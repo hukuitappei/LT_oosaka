@@ -3,10 +3,10 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
-from app.services.preprocessor import build_prompt
-from app.schemas.llm_output import LLMOutputV1
-from app.llm.base import BaseLLMProvider
 
+from app.llm.base import BaseLLMProvider
+from app.schemas.llm_output import LLMOutputV1
+from app.services.preprocessor import build_prompt
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
@@ -17,7 +17,7 @@ _RETRY_BASE_DELAY = 2.0  # seconds
 
 
 def load_fixture(pr_id: str) -> dict[str, Any]:
-    """サンプルPRデータをファイルから読み込む"""
+    """Load a sample PR payload from api/fixtures."""
     path = FIXTURES_DIR / f"{pr_id}.json"
     if not path.exists():
         raise FileNotFoundError(f"Fixture not found: {pr_id}")
@@ -25,7 +25,7 @@ def load_fixture(pr_id: str) -> dict[str, Any]:
 
 
 async def extract_from_pr(pr_data: dict[str, Any], provider: BaseLLMProvider) -> LLMOutputV1:
-    """PRデータから学びを抽出する（最大3回リトライ）"""
+    """Extract learning items from PR data with retry handling."""
     prompt = build_prompt(pr_data)
     last_exc: Exception | None = None
     for attempt in range(1, _MAX_RETRIES + 1):
@@ -37,7 +37,10 @@ async def extract_from_pr(pr_data: dict[str, Any], provider: BaseLLMProvider) ->
                 delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 logger.warning(
                     "LLM extraction attempt %d/%d failed, retrying in %.1fs: %s",
-                    attempt, _MAX_RETRIES, delay, exc,
+                    attempt,
+                    _MAX_RETRIES,
+                    delay,
+                    exc,
                 )
                 await asyncio.sleep(delay)
             else:

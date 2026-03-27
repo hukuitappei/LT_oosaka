@@ -1,15 +1,7 @@
 import Link from "next/link"
 import { api } from "@/lib/api"
 import { getRequestContextHeaders } from "@/lib/request-context"
-
-const CATEGORY_LABELS: Record<string, string> = {
-  security: "セキュリティ",
-  performance: "パフォーマンス",
-  design: "設計",
-  testing: "テスト",
-  code_quality: "コード品質",
-  other: "その他",
-}
+import { CATEGORY_LABELS } from "@/lib/learning-item-labels"
 
 export default async function Home() {
   const requestHeaders = await getRequestContextHeaders()
@@ -20,10 +12,12 @@ export default async function Home() {
 
   if (!items && !digests) {
     return (
-      <main className="min-h-screen p-8 max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-1">週報AI</h1>
-        <p className="text-gray-500 mb-8">試行錯誤を知識に変えるシステム</p>
-        <p className="text-center text-gray-500 py-8">データを取得できませんでした。ログインしてください。</p>
+      <main className="mx-auto min-h-screen max-w-4xl p-8">
+        <h1 className="mb-1 text-3xl font-bold">PR Knowledge Hub</h1>
+        <p className="mb-8 text-gray-500">レビューの知見を次の実装へつなげるダッシュボード</p>
+        <p className="py-8 text-center text-gray-500">
+          データを取得できませんでした。ログイン状態と API 接続を確認してください。
+        </p>
       </main>
     )
   }
@@ -49,11 +43,12 @@ export default async function Home() {
             </p>
             <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-white md:text-5xl">
               PRレビューの指摘を、
-              次の開発で使える知識に変える。
+              <br />
+              次の実装で使える学びへ変える
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
-              レビューコメントを埋もれさせず、学びと次回アクションに変換して蓄積する。
-              Weekly Digest はその結果を振り返るための補助レイヤーです。
+              レビューコメントを整理し、次回に再利用できるアクションへ落とし込みます。
+              Weekly Digest では、その週に蓄積された学びを振り返れます。
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
@@ -73,7 +68,7 @@ export default async function Home() {
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
             <StatCard label="学びの総数" value={items?.length ?? 0} />
-            <StatCard label="今週の抽出数" value={latestDigest?.learning_count ?? 0} />
+            <StatCard label="最新 Digest の件数" value={latestDigest?.learning_count ?? 0} />
             <StatCard label="Digest 数" value={digests?.length ?? 0} />
           </div>
         </div>
@@ -81,16 +76,16 @@ export default async function Home() {
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
         <InsightCard
-          title="現在の摩擦"
-          body="レビューで得た知見がPR単位で流れ、次の実装で再利用しにくい。"
+          title="レビューの再利用"
+          body="レビューで見つかった知見を PR ごとに終わらせず、次の実装で使える形へ残します。"
         />
         <InsightCard
-          title="変えること"
-          body="指摘を evidence と action に構造化し、チームの学習単位として残す。"
+          title="次につなげる"
+          body="学びは evidence と next action に分けて保存し、次回の判断材料にします。"
         />
         <InsightCard
-          title="期待する効果"
-          body="同種の指摘を減らし、レビューを知識の再生産に変える。"
+          title="傾向を把握する"
+          body="カテゴリ別の偏りや繰り返し出る論点を Digest でまとめて確認できます。"
         />
       </section>
 
@@ -98,8 +93,8 @@ export default async function Home() {
         <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-white">最近の学び</h2>
-              <p className="text-sm text-stone-400">レビュー指摘から生成された次回アクション</p>
+              <h2 className="text-xl font-semibold text-white">最新の学び</h2>
+              <p className="text-sm text-stone-400">レビュー指摘から抽出された最近のアクション</p>
             </div>
             <Link href="/learning-items" className="text-sm text-amber-300 hover:text-amber-200">
               すべて見る
@@ -107,7 +102,7 @@ export default async function Home() {
           </div>
 
           {!latestItems.length ? (
-            <p className="text-sm text-stone-400">まだ学びがありません。</p>
+            <p className="text-sm text-stone-400">学びはまだありません。</p>
           ) : (
             <div className="space-y-4">
               {latestItems.map((item) => (
@@ -136,7 +131,7 @@ export default async function Home() {
                     rel="noreferrer"
                     className="mt-3 inline-block text-sm text-sky-300 hover:text-sky-200"
                   >
-                    元のPRを開く
+                    GitHub の PR を開く
                   </a>
                 </article>
               ))}
@@ -169,7 +164,7 @@ export default async function Home() {
           )}
 
           <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
-            <h2 className="mb-4 text-xl font-semibold text-white">繰り返し出る論点</h2>
+            <h2 className="mb-4 text-xl font-semibold text-white">よく出るカテゴリ</h2>
             {topCategories.length > 0 ? (
               <div className="space-y-3">
                 {topCategories.map(([cat, count]) => (
@@ -188,7 +183,7 @@ export default async function Home() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-stone-400">カテゴリの集計対象がありません。</p>
+              <p className="text-sm text-stone-400">カテゴリ集計の対象データはまだありません。</p>
             )}
           </section>
         </div>

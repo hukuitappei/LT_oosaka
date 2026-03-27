@@ -56,6 +56,9 @@ alembic -c migrations/alembic.ini upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+`app.main:app` is the production-style entrypoint. It does not mount the fixture-backed `/analyze` routes.
+Use the fixture samples under `api/fixtures/` from tests or ad hoc local checks when you need to inspect extraction behavior.
+
 Frontend:
 
 ```bash
@@ -89,7 +92,8 @@ npm run build
 
 Current local verification at the time of the latest refactor:
 
-- `api`: `47 passed`
+- `api`: `53 passed`
+- `web`: lint passes before build in CI
 - `web`: production build succeeds
 
 ## CI
@@ -97,7 +101,7 @@ Current local verification at the time of the latest refactor:
 GitHub Actions runs:
 
 - `api`: `pytest -q`
-- `web`: `npm ci && npm run build`
+- `web`: `npm ci && npm run lint && npm run build`
 
 Workflow file:
 
@@ -112,6 +116,13 @@ Workflow file:
 5. Review learning items on `/learning-items`.
 6. Generate and read workspace-scoped digests on `/weekly-digests`.
 7. Reanalyze an existing PR through the API, executed asynchronously by Celery.
+
+## Development Notes
+
+- The fixture-backed `/analyze` router is intentionally excluded from `app.main:app`.
+- `api/fixtures/` is a development and test aid for extraction behavior, not a production API surface.
+- `web` CI runs both `npm run lint` and `npm run build`.
+- Webhook, Celery, and digest logs include stable tracing fields such as `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week`.
 
 ## Key Decisions Reflected in the Current Code
 
@@ -144,4 +155,3 @@ Defined in `.env.example`:
 - GitHub integrations are not usable without the corresponding app or OAuth secrets.
 - LLM-based extraction depends on either Anthropic or Ollama being configured.
 - Docker Compose verification was not run in the current environment because Docker was unavailable there.
-- The codebase still contains a legacy `WeeklyDigest.user_id` column, but the active digest flow is workspace-scoped.
