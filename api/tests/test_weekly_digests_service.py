@@ -52,6 +52,15 @@ def test_resolve_weekly_digest_period_defaults_from_today():
     assert period.week == 13
 
 
+def test_resolve_previous_week_period_uses_previous_iso_week():
+    from app.services.weekly_digests import resolve_previous_week_period
+
+    period = resolve_previous_week_period(today=date(2026, 1, 4))
+
+    assert period.year == 2025
+    assert period.week == 52
+
+
 @pytest.mark.asyncio
 async def test_generate_workspace_weekly_digest_raises_when_provider_missing(monkeypatch, db_session):
     from app.services.weekly_digests import (

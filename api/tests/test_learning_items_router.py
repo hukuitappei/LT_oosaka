@@ -59,3 +59,26 @@ async def test_get_learning_item_returns_404_when_missing(monkeypatch):
 
     assert exc.value.status_code == 404
     routes.get_workspace_learning_item.assert_awaited_once_with(db, 11, 3)
+
+
+@pytest.mark.asyncio
+async def test_get_learning_items_summary_clamps_weeks(monkeypatch):
+    from app.routers import learning_items as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    current_workspace = SimpleNamespace(id=3)
+    summary = SimpleNamespace(total_learning_items=0)
+
+    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
+    monkeypatch.setattr(routes, "summarize_workspace_learning_items", AsyncMock(return_value=summary))
+
+    result = await routes.get_learning_items_summary(
+        weeks=99,
+        db=db,
+        current_user=current_user,
+        current_workspace=current_workspace,
+    )
+
+    assert result == summary
+    routes.summarize_workspace_learning_items.assert_awaited_once_with(db, 3, weeks=26)

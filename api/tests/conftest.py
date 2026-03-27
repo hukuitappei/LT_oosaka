@@ -66,6 +66,7 @@ def _version_with_email_validator(name: str):
 importlib_metadata.version = _version_with_email_validator
 
 from app.db.session import Base  # noqa: E402
+from app.db import models as _models  # noqa: F401,E402
 from app.llm.base import BaseLLMProvider  # noqa: E402
 from app.schemas.llm_output import LLMOutputV1, LearningItem as LLMLearningItem  # noqa: E402
 

@@ -84,3 +84,34 @@ async def test_generate_digest_task_logs_context(monkeypatch, caplog):
         in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_generate_scheduled_weekly_digests_task_logs_context(monkeypatch, caplog):
+    from app.tasks.extract import generate_scheduled_weekly_digests_task
+
+    def fake_run(coro):
+        coro.close()
+        return {
+            "status": "ok",
+            "year": 2026,
+            "week": 12,
+            "workspace_count": 4,
+            "generated_count": 4,
+        }
+
+    monkeypatch.setattr("app.tasks.extract.asyncio.run", fake_run)
+
+    with caplog.at_level(logging.INFO):
+        result = generate_scheduled_weekly_digests_task.__wrapped__()
+
+    assert result["status"] == "ok"
+    assert any(
+        "generate_scheduled_weekly_digests_task started attempt=1" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "generate_scheduled_weekly_digests_task completed attempt=1 year=2026 week=12 workspace_count=4 generated_count=4 status=ok"
+        in record.message
+        for record in caplog.records
+    )

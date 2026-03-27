@@ -17,6 +17,15 @@ def _payload_context(payload: dict) -> dict[str, object]:
     }
 
 
+def _schedule_context(result: dict) -> dict[str, object]:
+    return {
+        "year": result.get("year"),
+        "week": result.get("week"),
+        "workspace_count": result.get("workspace_count"),
+        "generated_count": result.get("generated_count"),
+    }
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def extract_pr_task(self, payload: dict) -> dict:
     """
@@ -208,3 +217,65 @@ async def _run_generate_digest(
             db,
         )
     return {"status": "ok", "digest_id": digest.id}
+
+
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=600)
+def generate_scheduled_weekly_digests_task(self) -> dict:
+    retries = getattr(getattr(self, "request", None), "retries", 0)
+    logger.info(
+        "generate_scheduled_weekly_digests_task started attempt=%d",
+        retries + 1,
+    )
+    try:
+        result = asyncio.run(_run_generate_scheduled_weekly_digests())
+        context = _schedule_context(result)
+        logger.info(
+            "generate_scheduled_weekly_digests_task completed attempt=%d year=%s week=%s workspace_count=%s generated_count=%s status=%s",
+            retries + 1,
+            context["year"],
+            context["week"],
+            context["workspace_count"],
+            context["generated_count"],
+            result.get("status"),
+        )
+        return result
+    except Exception as exc:
+        logger.exception(
+            "generate_scheduled_weekly_digests_task failed attempt=%d, retrying...",
+            retries + 1,
+        )
+        raise self.retry(exc=exc)
+
+
+async def _run_generate_scheduled_weekly_digests() -> dict:
+    from sqlalchemy import select
+
+    from app.db.models import Workspace
+    from app.db.session import AsyncSessionLocal
+    from app.llm import get_default_llm_provider
+    from app.services.digest_generator import generate_weekly_digest
+    from app.services.weekly_digests import resolve_previous_week_period
+
+    period = resolve_previous_week_period()
+    provider = get_default_llm_provider()
+
+    async with AsyncSessionLocal() as db:
+        workspace_ids = list((await db.scalars(select(Workspace.id))).all())
+        generated_count = 0
+        for workspace_id in workspace_ids:
+            await generate_weekly_digest(
+                period.year,
+                period.week,
+                workspace_id,
+                provider,
+                db,
+            )
+            generated_count += 1
+
+    return {
+        "status": "ok",
+        "year": period.year,
+        "week": period.week,
+        "workspace_count": len(workspace_ids),
+        "generated_count": generated_count,
+    }

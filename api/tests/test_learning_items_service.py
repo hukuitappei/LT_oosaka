@@ -120,3 +120,85 @@ async def test_get_workspace_learning_item_requires_workspace_scope(db_session):
 
     with pytest.raises(LearningItemNotFoundError):
         await get_workspace_learning_item(db_session, item.id, workspace.id + 1)
+
+
+@pytest.mark.asyncio
+async def test_summarize_workspace_learning_items_returns_weekly_points(db_session):
+    from app.db.models import LearningItem, PullRequest, Repository, Workspace
+    from app.services.learning_items import summarize_workspace_learning_items
+
+    workspace = Workspace(name="Alpha", slug="alpha-summary", is_personal=True)
+    db_session.add(workspace)
+    await db_session.flush()
+
+    repo = Repository(workspace_id=workspace.id, github_id=1, full_name="owner/repo", name="repo")
+    db_session.add(repo)
+    await db_session.flush()
+
+    first_pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=42,
+        title="Improve validation",
+        body="body",
+        state="merged",
+        author="alice",
+        github_url="https://example.com/pr/42",
+        created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
+    )
+    second_pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=43,
+        title="Improve tests",
+        body="body",
+        state="merged",
+        author="alice",
+        github_url="https://example.com/pr/43",
+        created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
+    )
+    db_session.add_all([first_pr, second_pr])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            LearningItem(
+                workspace_id=workspace.id,
+                pull_request_id=first_pr.id,
+                schema_version="1.0",
+                title="Design item",
+                detail="detail",
+                category="design",
+                confidence=0.9,
+                action_for_next_time="act",
+                evidence="evidence",
+                visibility="workspace_shared",
+                created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
+            ),
+            LearningItem(
+                workspace_id=workspace.id,
+                pull_request_id=second_pr.id,
+                schema_version="1.0",
+                title="Testing item",
+                detail="detail",
+                category="testing",
+                confidence=0.8,
+                action_for_next_time="act",
+                evidence="evidence",
+                visibility="workspace_shared",
+                created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    summary = await summarize_workspace_learning_items(
+        db_session,
+        workspace.id,
+        weeks=3,
+        today=datetime(2026, 3, 27, tzinfo=timezone.utc).date(),
+    )
+
+    assert summary.total_learning_items == 2
+    assert summary.current_week_count == 1
+    assert [point.label for point in summary.weekly_points] == ["2026-W11", "2026-W12", "2026-W13"]
+    assert [point.learning_count for point in summary.weekly_points] == [0, 1, 1]
+    assert {(row.category, row.count) for row in summary.top_categories} == {("design", 1), ("testing", 1)}

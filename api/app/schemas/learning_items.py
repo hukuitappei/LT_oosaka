@@ -37,3 +37,22 @@ class LearningItemResponse(BaseModel):
     pull_request: PullRequestRef
 
     model_config = {"from_attributes": True}
+
+
+class LearningItemsWeeklyPoint(BaseModel):
+    year: int
+    week: int
+    label: str
+    learning_count: int
+
+
+class LearningItemsCategoryCount(BaseModel):
+    category: str
+    count: int
+
+
+class LearningItemsSummaryResponse(BaseModel):
+    total_learning_items: int
+    current_week_count: int
+    weekly_points: list[LearningItemsWeeklyPoint]
+    top_categories: list[LearningItemsCategoryCount]

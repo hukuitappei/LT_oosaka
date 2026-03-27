@@ -40,6 +40,21 @@ export interface WeeklyDigest {
   created_at: string
 }
 
+export interface LearningItemsSummary {
+  total_learning_items: number
+  current_week_count: number
+  weekly_points: Array<{
+    year: number
+    week: number
+    label: string
+    learning_count: number
+  }>
+  top_categories: Array<{
+    category: string
+    count: number
+  }>
+}
+
 export interface Repository {
   id: number
   github_id: number
@@ -144,6 +159,8 @@ export async function register(email: string, password: string): Promise<TokenRe
 export const api = {
   getLearningItems: (options?: ApiFetchOptions) =>
     apiFetch<LearningItem[]>("/learning-items/", options),
+  getLearningItemsSummary: (options?: ApiFetchOptions) =>
+    apiFetch<LearningItemsSummary>("/learning-items/summary", options),
   getWeeklyDigests: (options?: ApiFetchOptions) =>
     apiFetch<WeeklyDigest[]>("/weekly-digests/", options),
   getWeeklyDigest: (id: number, options?: ApiFetchOptions) =>

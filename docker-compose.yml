@@ -40,6 +40,16 @@ services:
       cache:
         condition: service_healthy
 
+  scheduler:
+    build: ./api
+    command: celery -A app.celery_app beat --loglevel=info
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     environment:

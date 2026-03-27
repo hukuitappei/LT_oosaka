@@ -50,6 +50,13 @@ async def list_workspace_weekly_digests(
     return list(result.scalars().all())
 
 
+def resolve_previous_week_period(*, today: date | None = None) -> WeeklyDigestPeriod:
+    current_day = today or date.today()
+    previous_week_day = current_day.fromordinal(current_day.toordinal() - 7)
+    year, week, _ = previous_week_day.isocalendar()
+    return WeeklyDigestPeriod(year=year, week=week)
+
+
 async def get_workspace_weekly_digest(
     db: AsyncSession,
     digest_id: int,
