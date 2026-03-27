@@ -12,17 +12,7 @@ if str(API_ROOT) not in sys.path:
 
 from app.db.models import User, Workspace, WorkspaceMember
 from app.routers.auth import RegisterRequest, login, register
-from app.routers.workspaces import (
-    AddMemberRequest,
-    CreateWorkspaceRequest,
-    UpdateMemberRequest,
-    add_workspace_member,
-    create_workspace_endpoint,
-    get_current_workspace_context,
-    get_workspace,
-    list_workspaces,
-    update_workspace_member,
-)
+from app.routers.workspaces import get_current_workspace_context
 from app.dependencies import get_current_workspace
 from app.routers.learning_items import list_learning_items
 from app.services.auth import decode_access_token
@@ -72,27 +62,6 @@ async def test_login_reuses_default_workspace_id(db_session, monkeypatch):
 
     assert logged_in.default_workspace_id == created.default_workspace_id
 
-
-@pytest.mark.asyncio
-async def test_me_lists_workspace_memberships(db_session, monkeypatch):
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "secret_key", "test-secret", raising=False)
-
-    created = await register(
-        RegisterRequest(email="carol@example.com", password="pw-123456"),
-        db_session,
-    )
-    payload = decode_access_token(created.access_token)
-    user = await db_session.get(User, int(payload["sub"]))
-
-    result = await list_workspaces(current_user=user, db=db_session)
-
-    assert len(result) == 1
-    assert result[0].is_personal is True
-    assert result[0].role == "owner"
-
-
 @pytest.mark.asyncio
 async def test_current_workspace_context_uses_header_workspace_id(db_session, monkeypatch):
     from app.config import settings
@@ -120,50 +89,6 @@ async def test_current_workspace_context_uses_header_workspace_id(db_session, mo
     assert result.id == workspace.id
     assert result.role == "owner"
 
-
-@pytest.mark.asyncio
-async def test_create_workspace_and_add_member(db_session, monkeypatch):
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "secret_key", "test-secret", raising=False)
-
-    owner_response = await register(
-        RegisterRequest(email="owner@example.com", password="pw-123456"),
-        db_session,
-    )
-    member_response = await register(
-        RegisterRequest(email="member@example.com", password="pw-123456"),
-        db_session,
-    )
-    owner = await db_session.get(User, int(decode_access_token(owner_response.access_token)["sub"]))
-    member = await db_session.get(User, int(decode_access_token(member_response.access_token)["sub"]))
-
-    created = await create_workspace_endpoint(
-        CreateWorkspaceRequest(name="Team Alpha"),
-        current_user=owner,
-        db=db_session,
-    )
-    assert created.role == "owner"
-
-    added = await add_workspace_member(
-        created.id,
-        AddMemberRequest(email=member.email, role="member"),
-        current_user=owner,
-        db=db_session,
-    )
-    assert added == {"status": "added"}
-
-    updated = await update_workspace_member(
-        created.id,
-        member.id,
-        UpdateMemberRequest(role="admin"),
-        current_user=owner,
-        db=db_session,
-    )
-    assert updated == {"status": "updated"}
-
-    workspace = await get_workspace(created.id, current_user=member, db=db_session)
-    assert workspace.id == created.id
 
 
 @pytest.mark.asyncio

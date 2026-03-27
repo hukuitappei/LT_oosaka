@@ -4,13 +4,22 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User, Workspace, WorkspaceMember
+from app.db.models import User, Workspace
 from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
-from app.services.workspaces import create_workspace
+from app.services.workspaces import (
+    WorkspaceMemberAlreadyExistsError,
+    WorkspaceMemberNotFoundError,
+    WorkspaceNotFoundError,
+    WorkspaceUserNotFoundError,
+    add_workspace_member_by_email,
+    create_workspace,
+    get_user_workspace,
+    list_user_workspaces,
+    update_workspace_member_role,
+)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -37,21 +46,12 @@ class UpdateMemberRequest(BaseModel):
     role: str
 
 
-def _workspace_with_role_query(user_id: int):
-    return (
-        select(Workspace, WorkspaceMember.role)
-        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
-        .where(WorkspaceMember.user_id == user_id)
-        .order_by(Workspace.is_personal.desc(), Workspace.name.asc())
-    )
-
-
 @router.get("/", response_model=list[WorkspaceOut])
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(_workspace_with_role_query(current_user.id))
+    result = await list_user_workspaces(db, current_user.id)
     return [
         WorkspaceOut(
             id=workspace.id,
@@ -61,7 +61,7 @@ async def list_workspaces(
             role=role,
             created_at=workspace.created_at,
         )
-        for workspace, role in result.all()
+        for workspace, role in result
     ]
 
 
@@ -90,15 +90,10 @@ async def get_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    row = await db.execute(
-        select(Workspace, WorkspaceMember.role)
-        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
-        .where(Workspace.id == workspace_id, WorkspaceMember.user_id == current_user.id)
-    )
-    result = row.first()
-    if result is None:
+    try:
+        workspace, role = await get_user_workspace(db, workspace_id, current_user.id)
+    except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    workspace, role = result
     return WorkspaceOut(
         id=workspace.id,
         name=workspace.name,
@@ -125,24 +120,12 @@ async def add_workspace_member(
         current_workspace=workspace,
         db=db,
     )
-    user = await db.scalar(select(User).where(User.email == request.email))
-    if user is None:
+    try:
+        await add_workspace_member_by_email(db, workspace_id, request.email, request.role)
+    except WorkspaceUserNotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
-    existing = await db.scalar(
-        select(WorkspaceMember).where(
-            WorkspaceMember.workspace_id == workspace_id,
-            WorkspaceMember.user_id == user.id,
-        )
-    )
-    if existing:
+    except WorkspaceMemberAlreadyExistsError:
         raise HTTPException(status_code=400, detail="User already belongs to workspace")
-    member = WorkspaceMember(
-        workspace_id=workspace_id,
-        user_id=user.id,
-        role=request.role,
-    )
-    db.add(member)
-    await db.commit()
     return {"status": "added"}
 
 
@@ -163,16 +146,10 @@ async def update_workspace_member(
         current_workspace=workspace,
         db=db,
     )
-    member = await db.scalar(
-        select(WorkspaceMember).where(
-            WorkspaceMember.workspace_id == workspace_id,
-            WorkspaceMember.user_id == user_id,
-        )
-    )
-    if member is None:
+    try:
+        await update_workspace_member_role(db, workspace_id, user_id, request.role)
+    except WorkspaceMemberNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace member not found")
-    member.role = request.role
-    await db.commit()
     return {"status": "updated"}
 
 

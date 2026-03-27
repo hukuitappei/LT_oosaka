@@ -117,10 +117,14 @@ Affected areas:
 - `api/app/services/pull_requests.py`
 - `api/app/routers/weekly_digests.py`
 - `api/app/services/weekly_digests.py`
+- `api/app/routers/workspaces.py`
+- `api/app/services/workspaces.py`
 - `api/tests/test_pull_requests_reanalyze.py`
 - `api/tests/test_pull_requests_service.py`
 - `api/tests/test_weekly_digests_router.py`
 - `api/tests/test_weekly_digests_service.py`
+- `api/tests/test_workspaces_router.py`
+- `api/tests/test_workspaces_service.py`
 
 ## Known Transitional State
 

@@ -66,6 +66,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - digest flow refactored to be workspace-centric
 - PR reanalysis moved to Celery
 - router/service boundaries tightened for PR reanalysis and weekly digest flows
+- workspace membership queries and updates moved behind service APIs
 - backend tests updated to current contracts
 
 ## Current Architecture Direction
@@ -104,7 +105,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 
 1. Continue moving remaining route-owned query/orchestration logic behind service APIs.
 2. Add one end-to-end flow covering register/login/workspace/learning-items/digest.
-3. Reduce remaining query duplication across services where the boundary is still fuzzy.
+3. Extract auth session and GitHub OAuth orchestration from `api/app/routers/auth.py`.
 
 ### Medium Priority
 
