@@ -49,11 +49,13 @@ async def test_create_token_connection_uses_service(monkeypatch):
         label="primary",
         workspace_id=None,
     )
-    workspace = SimpleNamespace(id=3)
     created = SimpleNamespace(id=11)
 
-    monkeypatch.setattr(routes, "resolve_github_connection_workspace", AsyncMock(return_value=workspace))
-    monkeypatch.setattr(routes, "create_token_github_connection", AsyncMock(return_value=created))
+    monkeypatch.setattr(
+        routes,
+        "create_token_github_connection_for_workspace_context",
+        AsyncMock(return_value=created),
+    )
 
     result = await routes.create_token_connection(
         request,
@@ -63,9 +65,10 @@ async def test_create_token_connection_uses_service(monkeypatch):
     )
 
     assert result == created
-    routes.create_token_github_connection.assert_awaited_once_with(
+    routes.create_token_github_connection_for_workspace_context.assert_awaited_once_with(
         db,
-        workspace_id=3,
+        requested_workspace_id=None,
+        current_workspace_id=3,
         user_id=7,
         access_token="secret-token",
         github_account_login="octocat",
@@ -84,7 +87,7 @@ async def test_create_token_connection_maps_workspace_permission_error(monkeypat
 
     monkeypatch.setattr(
         routes,
-        "resolve_github_connection_workspace",
+        "create_token_github_connection_for_workspace_context",
         AsyncMock(side_effect=routes.GitHubConnectionWorkspacePermissionError),
     )
 
@@ -100,6 +103,36 @@ async def test_create_token_connection_maps_workspace_permission_error(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_delete_connection_uses_service(monkeypatch):
+    from app.routers import github_connections as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    current_workspace = SimpleNamespace(id=3)
+
+    monkeypatch.setattr(
+        routes,
+        "delete_visible_github_connection",
+        AsyncMock(return_value=None),
+    )
+
+    result = await routes.delete_connection(
+        99,
+        current_user=current_user,
+        current_workspace=current_workspace,
+        db=db,
+    )
+
+    assert result == {"status": "deleted"}
+    routes.delete_visible_github_connection.assert_awaited_once_with(
+        db,
+        connection_id=99,
+        workspace_id=3,
+        user_id=7,
+    )
+
+
+@pytest.mark.asyncio
 async def test_delete_connection_maps_not_found_error(monkeypatch):
     from app.routers import github_connections as routes
 
@@ -109,18 +142,13 @@ async def test_delete_connection_maps_not_found_error(monkeypatch):
 
     monkeypatch.setattr(
         routes,
-        "get_visible_github_connection",
-        AsyncMock(side_effect=routes.GitHubConnectionNotFoundError),
-    )
-    monkeypatch.setattr(
-        routes,
         "delete_visible_github_connection",
-        AsyncMock(),
+        AsyncMock(side_effect=routes.GitHubConnectionNotFoundError),
     )
 
     with pytest.raises(HTTPException) as exc:
         await routes.delete_connection(
-            99,
+            11,
             current_user=current_user,
             current_workspace=current_workspace,
             db=db,
@@ -130,30 +158,25 @@ async def test_delete_connection_maps_not_found_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_workspace_connection_requires_admin_role(monkeypatch):
+async def test_delete_connection_maps_permission_error(monkeypatch):
     from app.routers import github_connections as routes
 
     db = SimpleNamespace()
     current_user = SimpleNamespace(id=7)
     current_workspace = SimpleNamespace(id=3)
-    connection = SimpleNamespace(workspace_id=3)
 
-    monkeypatch.setattr(routes, "get_visible_github_connection", AsyncMock(return_value=connection))
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
-    monkeypatch.setattr(routes, "delete_visible_github_connection", AsyncMock())
-
-    result = await routes.delete_connection(
-        11,
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
+    monkeypatch.setattr(
+        routes,
+        "delete_visible_github_connection",
+        AsyncMock(side_effect=routes.GitHubConnectionWorkspaceDeletePermissionError),
     )
 
-    assert result == {"status": "deleted"}
-    routes.require_workspace_role.assert_awaited_once()
-    routes.delete_visible_github_connection.assert_awaited_once_with(
-        db,
-        connection_id=11,
-        workspace_id=3,
-        user_id=7,
-    )
+    with pytest.raises(HTTPException) as exc:
+        await routes.delete_connection(
+            11,
+            current_user=current_user,
+            current_workspace=current_workspace,
+            db=db,
+        )
+
+    assert exc.value.status_code == 403

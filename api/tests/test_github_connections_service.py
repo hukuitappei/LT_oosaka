@@ -102,6 +102,7 @@ async def test_delete_visible_github_connection_removes_authorized_connection(db
     workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
     db_session.add_all([user, workspace])
     await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
 
     connection = GitHubConnection(
         provider_type="token",
@@ -121,6 +122,89 @@ async def test_delete_visible_github_connection_removes_authorized_connection(db
 
     deleted = await db_session.scalar(select(GitHubConnection).where(GitHubConnection.id == connection.id))
     assert deleted is None
+
+
+@pytest.mark.asyncio
+async def test_delete_visible_github_connection_rejects_non_admin_workspace_member(db_session):
+    from app.services.github_connections import (
+        GitHubConnectionWorkspaceDeletePermissionError,
+        delete_visible_github_connection,
+    )
+
+    user = User(email="member@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+
+    connection = GitHubConnection(
+        provider_type="token",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        access_token="token",
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    with pytest.raises(GitHubConnectionWorkspaceDeletePermissionError):
+        await delete_visible_github_connection(
+            db_session,
+            connection_id=connection.id,
+            workspace_id=workspace.id,
+            user_id=user.id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_token_github_connection_for_workspace_context_resolves_workspace(db_session):
+    from app.services.github_connections import create_token_github_connection_for_workspace_context
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    connection = await create_token_github_connection_for_workspace_context(
+        db_session,
+        requested_workspace_id=None,
+        current_workspace_id=workspace.id,
+        user_id=user.id,
+        access_token="secret-token",
+        github_account_login="octocat",
+        label="primary",
+    )
+
+    assert connection.workspace_id == workspace.id
+    assert connection.user_id == user.id
+    assert connection.access_token == "secret-token"
+
+
+@pytest.mark.asyncio
+async def test_link_app_github_connection_for_workspace_context_resolves_workspace(db_session):
+    from app.services.github_connections import link_app_github_connection_for_workspace_context
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    connection = await link_app_github_connection_for_workspace_context(
+        db_session,
+        requested_workspace_id=None,
+        current_workspace_id=workspace.id,
+        user_id=user.id,
+        installation_id=42,
+        github_account_login="octocat",
+        label="primary",
+    )
+
+    assert connection.workspace_id == workspace.id
+    assert connection.user_id == user.id
+    assert connection.installation_id == 42
 
 
 @pytest.mark.asyncio
