@@ -3,10 +3,18 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import GitHubConnection
+from app.db.models import GitHubConnection, Workspace, WorkspaceMember
 
 
 class GitHubConnectionNotFoundError(Exception):
+    pass
+
+
+class GitHubConnectionWorkspaceNotFoundError(Exception):
+    pass
+
+
+class GitHubConnectionWorkspacePermissionError(Exception):
     pass
 
 
@@ -43,6 +51,32 @@ async def list_visible_github_connections(
         )
     )
     return result.scalars().all()
+
+
+async def resolve_github_connection_workspace(
+    db: AsyncSession,
+    *,
+    requested_workspace_id: int | None,
+    current_workspace_id: int,
+    user_id: int,
+) -> Workspace:
+    workspace_id = current_workspace_id if requested_workspace_id is None else requested_workspace_id
+    row = await db.execute(
+        select(Workspace, WorkspaceMember.role)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(
+            Workspace.id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    result = row.first()
+    if result is None:
+        workspace = await db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise GitHubConnectionWorkspaceNotFoundError
+        raise GitHubConnectionWorkspacePermissionError
+    workspace, _role = result
+    return workspace
 
 
 async def create_token_github_connection(

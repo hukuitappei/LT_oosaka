@@ -1,13 +1,13 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
-const nextConfig: NextConfig = {
-  env: {
-    API_URL: process.env.API_URL || "http://localhost:8000",
-  },
-};
+const nextConfig: NextConfig = {}
 
-if (process.env.NEXT_OUTPUT === "standalone") {
-  nextConfig.output = "standalone";
+if (process.env.NEXT_DIST_DIR) {
+  nextConfig.distDir = process.env.NEXT_DIST_DIR
 }
 
-export default nextConfig;
+if (process.env.NEXT_OUTPUT === "standalone") {
+  nextConfig.output = "standalone"
+}
+
+export default nextConfig

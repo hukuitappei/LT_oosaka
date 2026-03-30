@@ -69,12 +69,47 @@ const learningItemsSummary = {
   ],
 }
 
+let nextGitHubConnectionId = 3
+const githubConnections = [
+  {
+    id: 1,
+    provider_type: "token",
+    workspace_id: 1,
+    user_id: 1,
+    installation_id: null,
+    github_account_login: "octocat",
+    label: "Personal token",
+    is_active: true,
+    created_at: "2026-03-27T00:00:00Z",
+  },
+  {
+    id: 2,
+    provider_type: "app",
+    workspace_id: 1,
+    user_id: 1,
+    installation_id: 123456,
+    github_account_login: "octocat",
+    label: "GitHub App",
+    is_active: true,
+    created_at: "2026-03-27T00:00:00Z",
+  },
+]
+
+async function readJsonBody(req) {
+  const chunks = []
+  for await (const chunk of req) {
+    chunks.push(chunk)
+  }
+  const raw = Buffer.concat(chunks).toString("utf8")
+  return raw ? JSON.parse(raw) : {}
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" })
   res.end(JSON.stringify(payload))
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host}`)
 
   if (req.method === "GET" && url.pathname === "/health") {
@@ -99,6 +134,66 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/1") {
     return sendJson(res, 200, weeklyDigests[0])
+  }
+
+  if (req.method === "GET" && url.pathname === "/github-connections/") {
+    return sendJson(res, 200, githubConnections)
+  }
+
+  if (req.method === "POST" && url.pathname === "/github-connections/token") {
+    const body = await readJsonBody(req)
+    const connection = {
+      id: nextGitHubConnectionId++,
+      provider_type: "token",
+      workspace_id: 1,
+      user_id: 1,
+      installation_id: null,
+      github_account_login: body.github_account_login ?? null,
+      label: body.label ?? null,
+      is_active: true,
+      created_at: "2026-03-30T00:00:00Z",
+    }
+    githubConnections.unshift(connection)
+    return sendJson(res, 201, connection)
+  }
+
+  if (req.method === "POST" && url.pathname === "/github-connections/app/link") {
+    const body = await readJsonBody(req)
+    const existing = githubConnections.find(
+      (connection) =>
+        connection.provider_type === "app" &&
+        connection.installation_id === body.installation_id &&
+        connection.workspace_id === 1,
+    )
+    if (existing) {
+      existing.github_account_login = body.github_account_login ?? existing.github_account_login
+      existing.label = body.label ?? existing.label
+      existing.is_active = true
+      return sendJson(res, 201, existing)
+    }
+    const connection = {
+      id: nextGitHubConnectionId++,
+      provider_type: "app",
+      workspace_id: 1,
+      user_id: 1,
+      installation_id: body.installation_id,
+      github_account_login: body.github_account_login ?? null,
+      label: body.label ?? null,
+      is_active: true,
+      created_at: "2026-03-30T00:00:00Z",
+    }
+    githubConnections.unshift(connection)
+    return sendJson(res, 201, connection)
+  }
+
+  if (req.method === "DELETE" && url.pathname.startsWith("/github-connections/")) {
+    const connectionId = Number(url.pathname.split("/").pop())
+    const index = githubConnections.findIndex((connection) => connection.id === connectionId)
+    if (index === -1) {
+      return sendJson(res, 404, { detail: "Connection not found" })
+    }
+    githubConnections.splice(index, 1)
+    return sendJson(res, 200, { status: "deleted" })
   }
 
   return sendJson(res, 404, { detail: "Not found" })

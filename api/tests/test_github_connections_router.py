@@ -52,7 +52,7 @@ async def test_create_token_connection_uses_service(monkeypatch):
     workspace = SimpleNamespace(id=3)
     created = SimpleNamespace(id=11)
 
-    monkeypatch.setattr(routes, "_resolve_workspace", AsyncMock(return_value=workspace))
+    monkeypatch.setattr(routes, "resolve_github_connection_workspace", AsyncMock(return_value=workspace))
     monkeypatch.setattr(routes, "create_token_github_connection", AsyncMock(return_value=created))
 
     result = await routes.create_token_connection(
@@ -71,6 +71,32 @@ async def test_create_token_connection_uses_service(monkeypatch):
         github_account_login="octocat",
         label="primary",
     )
+
+
+@pytest.mark.asyncio
+async def test_create_token_connection_maps_workspace_permission_error(monkeypatch):
+    from app.routers import github_connections as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    current_workspace = SimpleNamespace(id=3)
+    request = routes.TokenConnectionRequest(access_token="secret-token")
+
+    monkeypatch.setattr(
+        routes,
+        "resolve_github_connection_workspace",
+        AsyncMock(side_effect=routes.GitHubConnectionWorkspacePermissionError),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await routes.create_token_connection(
+            request,
+            current_user=current_user,
+            current_workspace=current_workspace,
+            db=db,
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,5 @@
 import { getClientRequestHeaders, getToken } from "@/lib/auth"
 
-const API_URL = process.env.API_URL || "http://localhost:8000"
-
 export interface LearningItem {
   id: number
   pull_request_id: number
@@ -84,11 +82,29 @@ export interface TokenResponse {
 export interface ApiFetchOptions {
   token?: string
   headers?: HeadersInit
+  throwOnError?: boolean
 }
 
 export interface ApiRequestOptions extends ApiFetchOptions {
   method?: string
   body?: unknown
+}
+
+export class ApiRequestError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiRequestError"
+    this.status = status
+  }
+}
+
+function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "/api/backend"
+  }
+  return process.env.API_URL || "http://localhost:8000"
 }
 
 function toHeaders(input?: HeadersInit): Headers {
@@ -140,7 +156,7 @@ async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Pro
       headers.set("Content-Type", "application/json")
     }
 
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${getApiBaseUrl()}${path}`, {
       method: options.method ?? "GET",
       cache: "no-store",
       headers,
@@ -150,10 +166,20 @@ async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Pro
           : JSON.stringify(options.body)
         : undefined,
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      if (!options.throwOnError) return null
+      const error = await res.json().catch(() => null)
+      throw new ApiRequestError(error?.detail ?? `Request failed with status ${res.status}`, res.status)
+    }
     if (res.status === 204) return null
     return res.json()
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) {
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new ApiRequestError("Network request failed", 0)
+    }
     return null
   }
 }
@@ -164,7 +190,7 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
 
 export async function login(email: string, password: string): Promise<TokenResponse> {
   const form = new URLSearchParams({ username: email, password })
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString(),
@@ -177,7 +203,7 @@ export async function login(email: string, password: string): Promise<TokenRespo
 }
 
 export async function register(email: string, password: string): Promise<TokenResponse> {
-  const res = await fetch(`${API_URL}/auth/register`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -213,6 +239,7 @@ export const api = {
   ) =>
     apiRequest<GitHubConnection>("/github-connections/token", {
       ...options,
+      throwOnError: options?.throwOnError ?? true,
       method: "POST",
       body: payload,
     }),
@@ -227,12 +254,14 @@ export const api = {
   ) =>
     apiRequest<GitHubConnection>("/github-connections/app/link", {
       ...options,
+      throwOnError: options?.throwOnError ?? true,
       method: "POST",
       body: payload,
     }),
   deleteGitHubConnection: (connectionId: number, options?: ApiFetchOptions) =>
     apiRequest<{ status: string }>(`/github-connections/${connectionId}`, {
       ...options,
+      throwOnError: options?.throwOnError ?? true,
       method: "DELETE",
     }),
 }

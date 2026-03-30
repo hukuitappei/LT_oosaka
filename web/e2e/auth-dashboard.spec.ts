@@ -15,7 +15,7 @@ test("redirects anonymous users and renders authenticated navigation", async ({ 
 
   await page.goto("/", { waitUntil: "domcontentloaded" })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("link", { name: "学び", exact: true })).toBeVisible()
-  await expect(page.getByRole("navigation").getByRole("link", { name: "週次ダイジェスト", exact: true })).toBeVisible()
-  await expect(page.getByRole("navigation").getByRole("link", { name: "GitHub 接続", exact: true })).toBeVisible()
+  await expect(page.locator('nav a[href="/learning-items"]')).toBeVisible()
+  await expect(page.locator('nav a[href="/weekly-digests"]')).toBeVisible()
+  await expect(page.locator('nav a[href="/github-connections"]')).toBeVisible()
 })

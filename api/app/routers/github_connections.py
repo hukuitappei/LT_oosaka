@@ -11,11 +11,14 @@ from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
 from app.services.github_connections import (
     GitHubConnectionNotFoundError,
+    GitHubConnectionWorkspaceNotFoundError,
+    GitHubConnectionWorkspacePermissionError,
     create_token_github_connection,
     delete_visible_github_connection,
     get_visible_github_connection,
     link_app_github_connection,
     list_visible_github_connections,
+    resolve_github_connection_workspace,
 )
 
 router = APIRouter(prefix="/github-connections", tags=["github-connections"])
@@ -49,24 +52,6 @@ class AppConnectionRequest(BaseModel):
     workspace_id: int | None = None
 
 
-async def _resolve_workspace(
-    workspace_id: int | None,
-    current_workspace: Workspace,
-    current_user: User,
-    db: AsyncSession,
-) -> Workspace:
-    workspace = current_workspace if workspace_id is None else await db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=workspace,
-        db=db,
-    )
-    return workspace
-
-
 @router.get("/", response_model=list[GitHubConnectionOut])
 async def list_connections(
     current_user: User = Depends(get_current_user),
@@ -87,7 +72,17 @@ async def create_token_connection(
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await _resolve_workspace(request.workspace_id, current_workspace, current_user, db)
+    try:
+        workspace = await resolve_github_connection_workspace(
+            db,
+            requested_workspace_id=request.workspace_id,
+            current_workspace_id=current_workspace.id,
+            user_id=current_user.id,
+        )
+    except GitHubConnectionWorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except GitHubConnectionWorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return await create_token_github_connection(
         db,
         workspace_id=workspace.id,
@@ -105,7 +100,17 @@ async def link_app_connection(
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await _resolve_workspace(request.workspace_id, current_workspace, current_user, db)
+    try:
+        workspace = await resolve_github_connection_workspace(
+            db,
+            requested_workspace_id=request.workspace_id,
+            current_workspace_id=current_workspace.id,
+            user_id=current_user.id,
+        )
+    except GitHubConnectionWorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except GitHubConnectionWorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return await link_app_github_connection(
         db,
         workspace_id=workspace.id,

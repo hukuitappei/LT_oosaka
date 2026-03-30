@@ -8,7 +8,7 @@ API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from app.db.models import GitHubConnection, User, Workspace
+from app.db.models import GitHubConnection, User, Workspace, WorkspaceMember
 
 
 @pytest.mark.asyncio
@@ -121,3 +121,45 @@ async def test_delete_visible_github_connection_removes_authorized_connection(db
 
     deleted = await db_session.scalar(select(GitHubConnection).where(GitHubConnection.id == connection.id))
     assert deleted is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_github_connection_workspace_uses_current_workspace_when_request_omitted(db_session):
+    from app.services.github_connections import resolve_github_connection_workspace
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    resolved = await resolve_github_connection_workspace(
+        db_session,
+        requested_workspace_id=None,
+        current_workspace_id=workspace.id,
+        user_id=user.id,
+    )
+
+    assert resolved.id == workspace.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_github_connection_workspace_rejects_user_without_membership(db_session):
+    from app.services.github_connections import (
+        GitHubConnectionWorkspacePermissionError,
+        resolve_github_connection_workspace,
+    )
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.commit()
+
+    with pytest.raises(GitHubConnectionWorkspacePermissionError):
+        await resolve_github_connection_workspace(
+            db_session,
+            requested_workspace_id=workspace.id,
+            current_workspace_id=workspace.id,
+            user_id=user.id,
+        )
