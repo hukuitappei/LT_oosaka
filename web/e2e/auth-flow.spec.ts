@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-test("authenticated users can navigate core pages and inspect GitHub connections", async ({ page }) => {
+test("authenticated users can navigate core pages and manage GitHub connections", async ({ page }) => {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("login-submit")).toBeVisible()
 
@@ -23,12 +23,31 @@ test("authenticated users can navigate core pages and inspect GitHub connections
   await page.goto("/github-connections", { waitUntil: "domcontentloaded" })
   await expect(page).toHaveURL(/\/github-connections$/)
   await expect(page.getByTestId("github-connections-ready")).toHaveAttribute("data-hydrated", "true")
-  await expect(page.getByRole("heading", { name: "GitHub Connections", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "GitHub 接続", exact: true })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Personal token", exact: true })).toHaveCount(2)
   await expect(page.getByRole("heading", { name: "GitHub App", exact: true })).toHaveCount(2)
-  await expect(page.getByRole("heading", { name: "Visible connections", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "接続一覧", exact: true })).toBeVisible()
   await expect(page.getByText("octocat")).toHaveCount(2)
-  await expect(page.getByText("2 total")).toBeVisible()
+  await expect(page.getByText("2 件")).toBeVisible()
+
+  await page.getByTestId("github-token-access-token").fill("ghp-added-for-e2e")
+  await page.getByTestId("github-token-login").fill("review-bot")
+  await page.getByTestId("github-token-label").fill("E2E token")
+  await page.getByTestId("github-token-submit").click()
+  await expect(page.getByRole("heading", { name: "E2E token", exact: true })).toBeVisible()
+  await expect(page.getByText("3 件")).toBeVisible()
+
+  await page.getByTestId("github-app-installation-id").fill("987654")
+  await page.getByTestId("github-app-login").fill("review-bot")
+  await page.getByTestId("github-app-label").fill("E2E app")
+  await page.getByTestId("github-app-submit").click()
+  await expect(page.getByRole("heading", { name: "E2E app", exact: true })).toBeVisible()
+  await expect(page.getByText("4 件")).toBeVisible()
+
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByTestId("github-connection-delete-3").click()
+  await expect(page.getByRole("heading", { name: "E2E token", exact: true })).toHaveCount(0)
+  await expect(page.getByText("3 件")).toBeVisible()
 
   await page.getByTestId("logout-button").click()
   await expect(page).toHaveURL(/\/login$/)

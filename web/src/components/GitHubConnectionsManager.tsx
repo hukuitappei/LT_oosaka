@@ -61,12 +61,12 @@ export default function GitHubConnectionsManager({
         label: tokenForm.label || null,
       })
       if (!created) {
-        throw new Error("Failed to create token connection")
+        throw new Error("token 接続の作成に失敗しました")
       }
       setConnections((current) => [created, ...current.filter((connection) => connection.id !== created.id)])
       setTokenForm(initialTokenForm)
     } catch (error) {
-      setTokenError(error instanceof Error ? error.message : "Failed to create token connection")
+      setTokenError(error instanceof Error ? error.message : "token 接続の作成に失敗しました")
     } finally {
       setIsSaving(false)
     }
@@ -81,7 +81,7 @@ export default function GitHubConnectionsManager({
     try {
       const installationId = Number(appLinkForm.installationId)
       if (!Number.isFinite(installationId) || installationId <= 0) {
-        throw new Error("Enter a valid installation ID")
+        throw new Error("Installation ID を正しく入力してください")
       }
 
       const created = await api.linkAppGitHubConnection({
@@ -90,13 +90,13 @@ export default function GitHubConnectionsManager({
         label: appLinkForm.label || null,
       })
       if (!created) {
-        throw new Error("Failed to link GitHub App installation")
+        throw new Error("GitHub App 連携に失敗しました")
       }
 
       setConnections((current) => [created, ...current.filter((connection) => connection.id !== created.id)])
       setAppLinkForm(initialAppLinkForm)
     } catch (error) {
-      setAppLinkError(error instanceof Error ? error.message : "Failed to link GitHub App installation")
+      setAppLinkError(error instanceof Error ? error.message : "GitHub App 連携に失敗しました")
     } finally {
       setIsSaving(false)
     }
@@ -105,18 +105,18 @@ export default function GitHubConnectionsManager({
   async function handleDeleteConnection(connection: GitHubConnection) {
     setActionError("")
     const connectionName = connection.label ?? connection.github_account_login ?? `#${connection.id}`
-    const confirmed = window.confirm(`Delete connection "${connectionName}"?`)
+    const confirmed = window.confirm(`接続「${connectionName}」を削除しますか？`)
     if (!confirmed) return
 
     setIsSaving(true)
     try {
       const result = await api.deleteGitHubConnection(connection.id)
       if (!result) {
-        throw new Error("Failed to delete connection")
+        throw new Error("接続の削除に失敗しました")
       }
       setConnections((current) => current.filter((item) => item.id !== connection.id))
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Failed to delete connection")
+      setActionError(error instanceof Error ? error.message : "接続の削除に失敗しました")
     } finally {
       setIsSaving(false)
     }
@@ -133,9 +133,9 @@ export default function GitHubConnectionsManager({
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
             Workspace scope
           </p>
-          <h2 className="text-2xl font-semibold text-white">Add a connection</h2>
+          <h2 className="text-2xl font-semibold text-white">接続を追加する</h2>
           <p className="mt-2 text-sm leading-6 text-stone-300">
-            Create a workspace-visible personal token or link a GitHub App installation.
+            current workspace で利用する personal token と GitHub App installation を登録します。
           </p>
         </div>
 
@@ -144,7 +144,7 @@ export default function GitHubConnectionsManager({
             <div className="mb-3">
               <h3 className="font-medium text-white">Personal token</h3>
               <p className="text-sm text-stone-400">
-                Store a token-backed connection for the current workspace.
+                token ベースの接続を workspace に追加します。
               </p>
             </div>
             <div className="space-y-3">
@@ -189,14 +189,14 @@ export default function GitHubConnectionsManager({
               disabled={isSaving}
               className="mt-4 rounded-full bg-amber-300 px-4 py-2 text-sm font-medium text-stone-950 transition-colors hover:bg-amber-200 disabled:opacity-50"
             >
-              Save token
+              token を保存
             </button>
           </form>
 
           <form onSubmit={handleCreateAppConnection} className="rounded-2xl border border-white/10 bg-black/10 p-4">
             <div className="mb-3">
               <h3 className="font-medium text-white">GitHub App</h3>
-              <p className="text-sm text-stone-400">Link an installation by installation ID.</p>
+              <p className="text-sm text-stone-400">Installation ID を使って App 連携を追加します。</p>
             </div>
             <div className="space-y-3">
               <Field label="Installation ID" required>
@@ -241,7 +241,7 @@ export default function GitHubConnectionsManager({
               disabled={isSaving}
               className="mt-4 rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
             >
-              Link app
+              App を連携
             </button>
           </form>
         </div>
@@ -250,18 +250,18 @@ export default function GitHubConnectionsManager({
       <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold text-white">Visible connections</h2>
-            <p className="text-sm text-stone-400">Connections currently visible in this workspace.</p>
+            <h2 className="text-2xl font-semibold text-white">接続一覧</h2>
+            <p className="text-sm text-stone-400">現在の workspace から参照できる接続です。</p>
           </div>
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-stone-300">
-            {connections.length} total
+            {connections.length} 件
           </span>
         </div>
 
         {actionError && <p className="mb-4 text-sm text-red-300">{actionError}</p>}
 
         {!connections.length ? (
-          <p className="text-sm text-stone-400">No GitHub connections are visible yet.</p>
+          <p className="text-sm text-stone-400">表示できる GitHub 接続はまだありません。</p>
         ) : (
           <div className="space-y-3">
             {connections.map((connection) => (
@@ -283,7 +283,7 @@ export default function GitHubConnectionsManager({
                       {connection.github_account_login ?? "unknown"}
                     </p>
                     <p className="mt-1 text-xs text-stone-500">
-                      installation {connection.installation_id ?? "n/a"} - id #{connection.id}
+                      installation {connection.installation_id ?? "n/a"} / id #{connection.id}
                     </p>
                   </div>
                   <button
@@ -293,7 +293,7 @@ export default function GitHubConnectionsManager({
                     onClick={() => void handleDeleteConnection(connection)}
                     className="rounded-full border border-red-300/20 px-3 py-1.5 text-sm text-red-200 transition-colors hover:bg-red-300/10 disabled:opacity-50"
                   >
-                    Delete
+                    削除
                   </button>
                 </div>
               </article>

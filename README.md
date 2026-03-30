@@ -135,7 +135,7 @@ Workflow file:
 - `api/fixtures/` is a development and test aid for extraction behavior, not a production API surface.
 - `web` CI runs both `npm run lint` and `npm run build`.
 - Webhook, Celery, and digest logs include stable tracing fields such as `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week`.
-- 直近の整理・修正内容の日本語サマリは `CHANGE_SUMMARY.md` に記録しています。
+- 直近の実装修正や判断メモは `CHANGE_SUMMARY.md` に記録しています。
 
 ## Key Decisions Reflected in the Current Code
 

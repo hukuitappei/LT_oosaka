@@ -20,21 +20,20 @@ export default async function GitHubConnectionsPage() {
     initialError =
       error instanceof ApiRequestError
         ? error.message
-        : "Failed to load GitHub connections. Check API_URL and your authentication context."
+        : "GitHub 接続の取得に失敗しました。認証情報と API 接続を確認してください。"
   }
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-10">
       <div className="mb-8">
         <Link href="/" className="text-sm text-stone-400 hover:text-stone-200">
-          Dashboard
+          ホーム
         </Link>
         <h1 className="mt-3 text-3xl font-semibold text-white" data-testid="github-connections-title">
-          GitHub Connections
+          GitHub 接続
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-300">
-          Manage personal tokens and GitHub App installations that are visible in the current
-          workspace.
+          現在の workspace で利用する personal token と GitHub App installation を管理します。
         </p>
       </div>
 
