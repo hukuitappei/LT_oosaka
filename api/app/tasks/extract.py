@@ -9,12 +9,36 @@ logger = logging.getLogger(__name__)
 def _payload_context(payload: dict) -> dict[str, object]:
     repo_data = payload.get("repository", {})
     pr_data = payload.get("pull_request", {})
+    action = payload.get("action", "")
+    repo = repo_data.get("full_name", "")
+    pr_number = pr_data.get("number")
+    installation_id = payload.get("installation", {}).get("id")
+    correlation_id = payload.get("correlation_id") or _build_correlation_id(
+        payload.get("event_type", ""),
+        action,
+        repo,
+        pr_number,
+        installation_id,
+    )
     return {
-        "action": payload.get("action", ""),
-        "repo": repo_data.get("full_name", ""),
-        "pr_number": pr_data.get("number"),
-        "installation_id": payload.get("installation", {}).get("id"),
+        "action": action,
+        "repo": repo,
+        "pr_number": pr_number,
+        "installation_id": installation_id,
+        "correlation_id": correlation_id,
     }
+
+
+def _build_correlation_id(
+    event_type: str,
+    action: str,
+    repo: str,
+    pr_number: object,
+    installation_id: object,
+) -> str:
+    pr_part = "na" if pr_number is None else str(pr_number)
+    installation_part = "na" if installation_id is None else str(installation_id)
+    return f"github-webhook:{event_type or 'unknown'}:{action or 'unknown'}:{repo or 'unknown'}:{pr_part}:{installation_part}"
 
 
 def _schedule_context(result: dict) -> dict[str, object]:
@@ -35,33 +59,36 @@ def extract_pr_task(self, payload: dict) -> dict:
     context = _payload_context(payload)
     retries = getattr(getattr(self, "request", None), "retries", 0)
     logger.info(
-        "extract_pr_task started attempt=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        "extract_pr_task started attempt=%d action=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s",
         retries + 1,
         context["action"],
         context["repo"],
         context["pr_number"],
         context["installation_id"],
+        context["correlation_id"],
     )
     try:
         result = asyncio.run(_run_extract_pr(payload))
         logger.info(
-            "extract_pr_task completed attempt=%d action=%s repo=%s pr_number=%s installation_id=%s status=%s",
+            "extract_pr_task completed attempt=%d action=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s status=%s",
             retries + 1,
             context["action"],
             context["repo"],
             context["pr_number"],
             context["installation_id"],
+            context["correlation_id"],
             result.get("status"),
         )
         return result
     except Exception as exc:
         logger.exception(
-            "extract_pr_task failed attempt=%d action=%s repo=%s pr_number=%s installation_id=%s, retrying...",
+            "extract_pr_task failed attempt=%d action=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s, retrying...",
             retries + 1,
             context["action"],
             context["repo"],
             context["pr_number"],
             context["installation_id"],
+            context["correlation_id"],
         )
         raise self.retry(exc=exc)
 

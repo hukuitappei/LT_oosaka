@@ -61,12 +61,12 @@ export default function GitHubConnectionsManager({
         label: tokenForm.label || null,
       })
       if (!created) {
-        throw new Error("token 接続の作成に失敗しました")
+        throw new Error("Failed to create token connection")
       }
       setConnections((current) => [created, ...current.filter((connection) => connection.id !== created.id)])
       setTokenForm(initialTokenForm)
     } catch (error) {
-      setTokenError(error instanceof Error ? error.message : "token 接続の作成に失敗しました")
+      setTokenError(error instanceof Error ? error.message : "Failed to create token connection")
     } finally {
       setIsSaving(false)
     }
@@ -81,7 +81,7 @@ export default function GitHubConnectionsManager({
     try {
       const installationId = Number(appLinkForm.installationId)
       if (!Number.isFinite(installationId) || installationId <= 0) {
-        throw new Error("Installation ID を正しく入力してください")
+        throw new Error("Please enter a valid Installation ID")
       }
 
       const created = await api.linkAppGitHubConnection({
@@ -90,13 +90,13 @@ export default function GitHubConnectionsManager({
         label: appLinkForm.label || null,
       })
       if (!created) {
-        throw new Error("GitHub App 連携に失敗しました")
+        throw new Error("Failed to create GitHub App connection")
       }
 
       setConnections((current) => [created, ...current.filter((connection) => connection.id !== created.id)])
       setAppLinkForm(initialAppLinkForm)
     } catch (error) {
-      setAppLinkError(error instanceof Error ? error.message : "GitHub App 連携に失敗しました")
+      setAppLinkError(error instanceof Error ? error.message : "Failed to create GitHub App connection")
     } finally {
       setIsSaving(false)
     }
@@ -105,18 +105,18 @@ export default function GitHubConnectionsManager({
   async function handleDeleteConnection(connection: GitHubConnection) {
     setActionError("")
     const connectionName = connection.label ?? connection.github_account_login ?? `#${connection.id}`
-    const confirmed = window.confirm(`接続「${connectionName}」を削除しますか？`)
+    const confirmed = window.confirm(`Delete connection "${connectionName}"?`)
     if (!confirmed) return
 
     setIsSaving(true)
     try {
       const result = await api.deleteGitHubConnection(connection.id)
       if (!result) {
-        throw new Error("接続の削除に失敗しました")
+        throw new Error("Failed to delete connection")
       }
       setConnections((current) => current.filter((item) => item.id !== connection.id))
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "接続の削除に失敗しました")
+      setActionError(error instanceof Error ? error.message : "Failed to delete connection")
     } finally {
       setIsSaving(false)
     }
@@ -133,19 +133,21 @@ export default function GitHubConnectionsManager({
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
             Workspace scope
           </p>
-          <h2 className="text-2xl font-semibold text-white">接続を追加する</h2>
+          <h2 className="text-2xl font-semibold text-white">Manage connections</h2>
           <p className="mt-2 text-sm leading-6 text-stone-300">
-            current workspace で利用する personal token と GitHub App installation を登録します。
+            Register the personal token and GitHub App installation used by the current workspace.
           </p>
         </div>
 
         <div className="space-y-4">
-          <form onSubmit={handleCreateTokenConnection} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+          <form
+            onSubmit={handleCreateTokenConnection}
+            className="rounded-2xl border border-white/10 bg-black/10 p-4"
+            data-testid="github-token-form"
+          >
             <div className="mb-3">
               <h3 className="font-medium text-white">Personal token</h3>
-              <p className="text-sm text-stone-400">
-                token ベースの接続を workspace に追加します。
-              </p>
+              <p className="text-sm text-stone-400">Register a token-based connection for the workspace.</p>
             </div>
             <div className="space-y-3">
               <Field label="Access token" required>
@@ -189,14 +191,18 @@ export default function GitHubConnectionsManager({
               disabled={isSaving}
               className="mt-4 rounded-full bg-amber-300 px-4 py-2 text-sm font-medium text-stone-950 transition-colors hover:bg-amber-200 disabled:opacity-50"
             >
-              token を保存
+              Register token
             </button>
           </form>
 
-          <form onSubmit={handleCreateAppConnection} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+          <form
+            onSubmit={handleCreateAppConnection}
+            className="rounded-2xl border border-white/10 bg-black/10 p-4"
+            data-testid="github-app-form"
+          >
             <div className="mb-3">
               <h3 className="font-medium text-white">GitHub App</h3>
-              <p className="text-sm text-stone-400">Installation ID を使って App 連携を追加します。</p>
+              <p className="text-sm text-stone-400">Register a GitHub App connection using the Installation ID.</p>
             </div>
             <div className="space-y-3">
               <Field label="Installation ID" required>
@@ -241,7 +247,7 @@ export default function GitHubConnectionsManager({
               disabled={isSaving}
               className="mt-4 rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
             >
-              App を連携
+              Register app
             </button>
           </form>
         </div>
@@ -250,22 +256,31 @@ export default function GitHubConnectionsManager({
       <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold text-white">接続一覧</h2>
-            <p className="text-sm text-stone-400">現在の workspace から参照できる接続です。</p>
+            <h2 className="text-2xl font-semibold text-white">Connection list</h2>
+            <p className="text-sm text-stone-400">Connections visible from the current workspace.</p>
           </div>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-stone-300">
-            {connections.length} 件
+          <span
+            className="rounded-full bg-white/10 px-3 py-1 text-xs text-stone-300"
+            data-testid="github-connections-count"
+          >
+            {connections.length} items
           </span>
         </div>
 
         {actionError && <p className="mb-4 text-sm text-red-300">{actionError}</p>}
 
         {!connections.length ? (
-          <p className="text-sm text-stone-400">表示できる GitHub 接続はまだありません。</p>
+          <p className="text-sm text-stone-400" data-testid="github-connections-empty-state">
+            No GitHub connections are available yet.
+          </p>
         ) : (
           <div className="space-y-3">
             {connections.map((connection) => (
-              <article key={connection.id} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+              <article
+                key={connection.id}
+                className="rounded-2xl border border-white/10 bg-black/10 p-4"
+                data-testid={`github-connection-card-${connection.id}`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -293,7 +308,7 @@ export default function GitHubConnectionsManager({
                     onClick={() => void handleDeleteConnection(connection)}
                     className="rounded-full border border-red-300/20 px-3 py-1.5 text-sm text-red-200 transition-colors hover:bg-red-300/10 disabled:opacity-50"
                   >
-                    削除
+                    Delete
                   </button>
                 </div>
               </article>

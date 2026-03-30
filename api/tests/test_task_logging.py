@@ -12,6 +12,7 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
         "repository": {"full_name": "owner/repo"},
         "pull_request": {"number": 42},
         "installation": {"id": 999},
+        "event_type": "pull_request_review_comment",
     }
 
     def fake_run(coro):
@@ -25,12 +26,12 @@ async def test_extract_pr_task_logs_context(monkeypatch, caplog):
 
     assert result == {"status": "ok", "pr_number": 42}
     assert any(
-        "extract_pr_task started attempt=1 action=created repo=owner/repo pr_number=42 installation_id=999"
+        "extract_pr_task started attempt=1 action=created repo=owner/repo pr_number=42 installation_id=999 correlation_id=github-webhook:pull_request_review_comment:created:owner/repo:42:999"
         in record.message
         for record in caplog.records
     )
     assert any(
-        "extract_pr_task completed attempt=1 action=created repo=owner/repo pr_number=42 installation_id=999 status=ok"
+        "extract_pr_task completed attempt=1 action=created repo=owner/repo pr_number=42 installation_id=999 correlation_id=github-webhook:pull_request_review_comment:created:owner/repo:42:999 status=ok"
         in record.message
         for record in caplog.records
     )

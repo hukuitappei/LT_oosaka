@@ -51,7 +51,7 @@ async def test_verify_signature_rejects_invalid_signature(monkeypatch):
 
 
 def test_process_github_webhook_enqueues_review_comment_via_celery(caplog):
-    from app.services.webhook import process_github_webhook
+    from app.services.webhook import build_webhook_correlation_id, process_github_webhook
 
     delay_mock = MagicMock()
     payload = {
@@ -74,14 +74,23 @@ def test_process_github_webhook_enqueues_review_comment_via_celery(caplog):
         "repository": {"full_name": "alice/repo"},
     }
     enqueued_payload = delay_mock.call_args.args[0]
+    expected_correlation_id = build_webhook_correlation_id(
+        "pull_request_review_comment",
+        {
+            "action": "created",
+            "pull_request": {"merged": True, "number": 42},
+            "repository": {"full_name": "alice/repo"},
+        },
+    )
     assert enqueued_payload["event_type"] == "pull_request_review_comment"
+    assert enqueued_payload["correlation_id"] == expected_correlation_id
     assert any(
-        "Webhook received event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42"
+        f"Webhook received event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
         in record.message
         for record in caplog.records
     )
     assert any(
-        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42"
+        f"Webhook enqueued Celery task task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
         in record.message
         for record in caplog.records
     )
@@ -106,8 +115,9 @@ def test_process_github_webhook_enqueues_merged_pull_request_via_celery(caplog):
         )
 
     delay_mock.assert_called_once()
+    assert delay_mock.call_args.args[0]["correlation_id"] == "github-webhook:pull_request:closed:alice/repo:7:99"
     assert any(
-        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7"
+        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7 installation_id=99 correlation_id=github-webhook:pull_request:closed:alice/repo:7:99"
         in record.message
         for record in caplog.records
     )
@@ -128,7 +138,8 @@ def test_process_github_webhook_does_not_enqueue_irrelevant_event(caplog):
 
     delay_mock.assert_not_called()
     assert any(
-        "Webhook ignored event_type=issues action=opened repo=alice/repo pr_number=None" in record.message
+        "Webhook ignored event_type=issues action=opened repo=alice/repo pr_number=None installation_id=None correlation_id=github-webhook:issues:opened:alice/repo:na:na"
+        in record.message
         for record in caplog.records
     )
 
