@@ -1,18 +1,25 @@
 import { spawn } from "node:child_process"
 import { once } from "node:events"
+import { rmSync } from "node:fs"
+import path from "node:path"
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
-const baseEnv = { ...process.env, API_URL: "http://127.0.0.1:4100" }
+const baseEnv = { ...process.env, API_URL: "http://localhost:4100" }
 const children = []
 let shuttingDown = false
 
-function spawnShell(command, env = baseEnv) {
-  const child = spawn(command, {
-    cwd: process.cwd(),
-    env,
-    stdio: "inherit",
-    shell: true,
-  })
+function spawnNpm(args, env = baseEnv) {
+  const child = process.platform === "win32"
+    ? spawn("cmd.exe", ["/c", npmCommand, ...args], {
+        cwd: process.cwd(),
+        env,
+        stdio: "inherit",
+      })
+    : spawn(npmCommand, args, {
+        cwd: process.cwd(),
+        env,
+        stdio: "inherit",
+      })
   children.push(child)
   return child
 }
@@ -66,15 +73,17 @@ process.on("SIGTERM", () => {
 })
 
 async function main() {
-  const build = spawnShell(`${npmCommand} run build`)
+  rmSync(path.join(process.cwd(), ".next"), { recursive: true, force: true })
+
+  const build = spawnNpm(["run", "build"])
   const buildExitCode = await once(build, "exit").then(([code]) => code ?? 1)
   if (buildExitCode !== 0) {
     await shutdown(buildExitCode)
     return
   }
 
-  const mockApi = spawnShell(`${npmCommand} run mock-api:e2e`)
-  const app = spawnShell(`${npmCommand} run start:e2e`)
+  const mockApi = spawnNpm(["run", "mock-api:e2e"])
+  const app = spawnNpm(["run", "start:e2e"])
 
   const earlyExit = new Promise((_, reject) => {
     for (const child of [mockApi, app]) {
@@ -88,16 +97,15 @@ async function main() {
 
   await Promise.race([
     Promise.all([
-      waitFor("http://127.0.0.1:4100/health"),
-      waitFor("http://127.0.0.1:3100/login"),
+      waitFor("http://localhost:4100/health"),
+      waitFor("http://localhost:3100/login"),
     ]),
     earlyExit,
   ])
 
-  const playwright = spawnShell(`${npmCommand} exec playwright test`, baseEnv)
-  playwright.on("exit", (code) => {
-    void shutdown(code ?? 1)
-  })
+  const playwright = spawnNpm(["exec", "playwright", "test"], baseEnv)
+  const [playwrightExitCode] = await once(playwright, "exit")
+  await shutdown(playwrightExitCode ?? 1)
 }
 
 main().catch((error) => {

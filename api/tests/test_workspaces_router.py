@@ -60,15 +60,13 @@ async def test_get_workspace_returns_404_when_membership_missing(monkeypatch):
 async def test_add_workspace_member_maps_service_errors(monkeypatch):
     from app.routers import workspaces as routes
 
-    workspace = SimpleNamespace(id=3)
-    db = SimpleNamespace(get=AsyncMock(return_value=workspace))
+    db = SimpleNamespace()
     current_user = SimpleNamespace(id=7)
     request = routes.AddMemberRequest(email="member@example.com", role="member")
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
-        "add_workspace_member_by_email",
+        "add_workspace_member_to_workspace",
         AsyncMock(side_effect=routes.WorkspaceMemberAlreadyExistsError),
     )
 
@@ -76,22 +74,46 @@ async def test_add_workspace_member_maps_service_errors(monkeypatch):
         await routes.add_workspace_member(3, request, current_user=current_user, db=db)
 
     assert exc.value.status_code == 400
-    routes.add_workspace_member_by_email.assert_awaited_once_with(db, 3, "member@example.com", "member")
+    routes.add_workspace_member_to_workspace.assert_awaited_once_with(
+        db,
+        workspace_id=3,
+        actor_user_id=7,
+        email="member@example.com",
+        role="member",
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_workspace_member_maps_permission_and_not_found_errors(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    request = routes.AddMemberRequest(email="member@example.com", role="member")
+
+    monkeypatch.setattr(
+        routes,
+        "add_workspace_member_to_workspace",
+        AsyncMock(side_effect=routes.WorkspacePermissionError),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await routes.add_workspace_member(3, request, current_user=current_user, db=db)
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_update_workspace_member_maps_service_errors(monkeypatch):
     from app.routers import workspaces as routes
 
-    workspace = SimpleNamespace(id=3)
-    db = SimpleNamespace(get=AsyncMock(return_value=workspace))
+    db = SimpleNamespace()
     current_user = SimpleNamespace(id=7)
     request = routes.UpdateMemberRequest(role="admin")
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
-        "update_workspace_member_role",
+        "update_workspace_member_role_in_workspace",
         AsyncMock(side_effect=routes.WorkspaceMemberNotFoundError),
     )
 
@@ -99,4 +121,30 @@ async def test_update_workspace_member_maps_service_errors(monkeypatch):
         await routes.update_workspace_member(3, 9, request, current_user=current_user, db=db)
 
     assert exc.value.status_code == 404
-    routes.update_workspace_member_role.assert_awaited_once_with(db, 3, 9, "admin")
+    routes.update_workspace_member_role_in_workspace.assert_awaited_once_with(
+        db,
+        workspace_id=3,
+        actor_user_id=7,
+        target_user_id=9,
+        role="admin",
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_workspace_member_maps_permission_error(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    request = routes.UpdateMemberRequest(role="admin")
+
+    monkeypatch.setattr(
+        routes,
+        "update_workspace_member_role_in_workspace",
+        AsyncMock(side_effect=routes.WorkspacePermissionError),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await routes.update_workspace_member(3, 9, request, current_user=current_user, db=db)
+
+    assert exc.value.status_code == 403

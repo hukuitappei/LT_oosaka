@@ -13,12 +13,13 @@ from app.services.workspaces import (
     WorkspaceMemberAlreadyExistsError,
     WorkspaceMemberNotFoundError,
     WorkspaceNotFoundError,
+    WorkspacePermissionError,
     WorkspaceUserNotFoundError,
-    add_workspace_member_by_email,
+    add_workspace_member_to_workspace,
     create_workspace,
     get_user_workspace,
     list_user_workspaces,
-    update_workspace_member_role,
+    update_workspace_member_role_in_workspace,
 )
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -111,21 +112,22 @@ async def add_workspace_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    await require_workspace_role(
-        {"owner", "admin"},
-        current_user=current_user,
-        current_workspace=workspace,
-        db=db,
-    )
     try:
-        await add_workspace_member_by_email(db, workspace_id, request.email, request.role)
+        await add_workspace_member_to_workspace(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            email=request.email,
+            role=request.role,
+        )
     except WorkspaceUserNotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
     except WorkspaceMemberAlreadyExistsError:
         raise HTTPException(status_code=400, detail="User already belongs to workspace")
+    except WorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except WorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return {"status": "added"}
 
 
@@ -137,19 +139,20 @@ async def update_workspace_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    await require_workspace_role(
-        {"owner", "admin"},
-        current_user=current_user,
-        current_workspace=workspace,
-        db=db,
-    )
     try:
-        await update_workspace_member_role(db, workspace_id, user_id, request.role)
+        await update_workspace_member_role_in_workspace(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            target_user_id=user_id,
+            role=request.role,
+        )
     except WorkspaceMemberNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace member not found")
+    except WorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except WorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return {"status": "updated"}
 
 

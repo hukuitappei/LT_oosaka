@@ -63,6 +63,18 @@ export interface Repository {
   created_at: string
 }
 
+export interface GitHubConnection {
+  id: number
+  provider_type: string
+  workspace_id: number | null
+  user_id: number | null
+  installation_id: number | null
+  github_account_login: string | null
+  label: string | null
+  is_active: boolean
+  created_at: string
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string
@@ -72,6 +84,11 @@ export interface TokenResponse {
 export interface ApiFetchOptions {
   token?: string
   headers?: HeadersInit
+}
+
+export interface ApiRequestOptions extends ApiFetchOptions {
+  method?: string
+  body?: unknown
 }
 
 function toHeaders(input?: HeadersInit): Headers {
@@ -102,7 +119,7 @@ function toHeaders(input?: HeadersInit): Headers {
   return headers
 }
 
-async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
+async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T | null> {
   const headers = toHeaders(options.headers)
   const token = options.token ?? getToken()
   const clientHeaders = getClientRequestHeaders()
@@ -118,15 +135,31 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
   }
 
   try {
+    const hasBody = options.body !== undefined
+    if (hasBody && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json")
+    }
+
     const res = await fetch(`${API_URL}${path}`, {
+      method: options.method ?? "GET",
       cache: "no-store",
       headers,
+      body: hasBody
+        ? typeof options.body === "string" || options.body instanceof FormData
+          ? options.body
+          : JSON.stringify(options.body)
+        : undefined,
     })
     if (!res.ok) return null
+    if (res.status === 204) return null
     return res.json()
   } catch {
     return null
   }
+}
+
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
+  return apiRequest<T>(path, options)
 }
 
 export async function login(email: string, password: string): Promise<TokenResponse> {
@@ -167,4 +200,39 @@ export const api = {
     apiFetch<WeeklyDigest>(`/weekly-digests/${id}`, options),
   getRepositories: (options?: ApiFetchOptions) =>
     apiFetch<Repository[]>("/repositories/", options),
+  getGitHubConnections: (options?: ApiFetchOptions) =>
+    apiFetch<GitHubConnection[]>("/github-connections/", options),
+  createTokenGitHubConnection: (
+    payload: {
+      access_token: string
+      github_account_login?: string | null
+      label?: string | null
+      workspace_id?: number | null
+    },
+    options?: ApiFetchOptions,
+  ) =>
+    apiRequest<GitHubConnection>("/github-connections/token", {
+      ...options,
+      method: "POST",
+      body: payload,
+    }),
+  linkAppGitHubConnection: (
+    payload: {
+      installation_id: number
+      github_account_login?: string | null
+      label?: string | null
+      workspace_id?: number | null
+    },
+    options?: ApiFetchOptions,
+  ) =>
+    apiRequest<GitHubConnection>("/github-connections/app/link", {
+      ...options,
+      method: "POST",
+      body: payload,
+    }),
+  deleteGitHubConnection: (connectionId: number, options?: ApiFetchOptions) =>
+    apiRequest<{ status: string }>(`/github-connections/${connectionId}`, {
+      ...options,
+      method: "DELETE",
+    }),
 }

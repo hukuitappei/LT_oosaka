@@ -107,3 +107,60 @@ async def test_update_workspace_member_role_updates_existing_member(db_session):
     )
     assert membership is not None
     assert membership.role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_add_workspace_member_to_workspace_requires_admin_membership(db_session):
+    from app.services.workspaces import WorkspacePermissionError, add_workspace_member_to_workspace
+
+    owner = User(email="owner@example.com", hashed_password="hashed::pw")
+    member = User(email="member@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([owner, member, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=owner.id, role="member"))
+    await db_session.commit()
+
+    with pytest.raises(WorkspacePermissionError):
+        await add_workspace_member_to_workspace(
+            db_session,
+            workspace_id=workspace.id,
+            actor_user_id=owner.id,
+            email=member.email,
+            role="member",
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_workspace_member_role_in_workspace_updates_member_when_admin(db_session):
+    from app.services.workspaces import update_workspace_member_role_in_workspace
+
+    owner = User(email="owner@example.com", hashed_password="hashed::pw")
+    target = User(email="target@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([owner, target, workspace])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            WorkspaceMember(workspace_id=workspace.id, user_id=owner.id, role="admin"),
+            WorkspaceMember(workspace_id=workspace.id, user_id=target.id, role="member"),
+        ]
+    )
+    await db_session.commit()
+
+    await update_workspace_member_role_in_workspace(
+        db_session,
+        workspace_id=workspace.id,
+        actor_user_id=owner.id,
+        target_user_id=target.id,
+        role="owner",
+    )
+
+    membership = await db_session.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace.id,
+            WorkspaceMember.user_id == target.id,
+        )
+    )
+    assert membership is not None
+    assert membership.role == "owner"

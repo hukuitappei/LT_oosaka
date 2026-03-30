@@ -1,0 +1,123 @@
+import sys
+from pathlib import Path
+
+import pytest
+from sqlalchemy import select
+
+API_ROOT = Path(__file__).resolve().parents[1]
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+from app.db.models import GitHubConnection, User, Workspace
+
+
+@pytest.mark.asyncio
+async def test_list_visible_github_connections_includes_workspace_and_personal(db_session):
+    from app.services.github_connections import list_visible_github_connections
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    other_user = User(email="other@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    other_workspace = Workspace(name="Beta", slug="beta", is_personal=False)
+    db_session.add_all([user, other_user, workspace, other_workspace])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            GitHubConnection(
+                provider_type="token",
+                workspace_id=workspace.id,
+                user_id=user.id,
+                access_token="workspace-token",
+                label="workspace",
+            ),
+            GitHubConnection(
+                provider_type="token",
+                workspace_id=None,
+                user_id=user.id,
+                access_token="personal-token",
+                label="personal",
+            ),
+            GitHubConnection(
+                provider_type="token",
+                workspace_id=other_workspace.id,
+                user_id=other_user.id,
+                access_token="other-token",
+                label="other",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await list_visible_github_connections(
+        db_session,
+        workspace_id=workspace.id,
+        user_id=user.id,
+    )
+
+    assert {connection.label for connection in result} == {"workspace", "personal"}
+
+
+@pytest.mark.asyncio
+async def test_link_app_github_connection_reactivates_existing_installation(db_session):
+    from app.services.github_connections import link_app_github_connection
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+
+    existing = GitHubConnection(
+        provider_type="app",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        installation_id=42,
+        github_account_login="old-login",
+        label="old-label",
+        is_active=False,
+    )
+    db_session.add(existing)
+    await db_session.commit()
+
+    connection = await link_app_github_connection(
+        db_session,
+        workspace_id=workspace.id,
+        user_id=user.id,
+        installation_id=42,
+        github_account_login="new-login",
+        label="new-label",
+    )
+
+    assert connection.id == existing.id
+    assert connection.github_account_login == "new-login"
+    assert connection.label == "new-label"
+    assert connection.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_delete_visible_github_connection_removes_authorized_connection(db_session):
+    from app.services.github_connections import delete_visible_github_connection
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+
+    connection = GitHubConnection(
+        provider_type="token",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        access_token="token",
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    await delete_visible_github_connection(
+        db_session,
+        connection_id=connection.id,
+        workspace_id=workspace.id,
+        user_id=user.id,
+    )
+
+    deleted = await db_session.scalar(select(GitHubConnection).where(GitHubConnection.id == connection.id))
+    assert deleted is None

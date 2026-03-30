@@ -24,6 +24,10 @@ class WorkspaceMemberNotFoundError(Exception):
     pass
 
 
+class WorkspacePermissionError(Exception):
+    pass
+
+
 def _slugify(value: str) -> str:
     base = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
     return base or "workspace"
@@ -125,6 +129,36 @@ async def get_user_workspace(
     return result
 
 
+async def get_workspace_by_id(
+    db: AsyncSession,
+    workspace_id: int,
+) -> Workspace:
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None:
+        raise WorkspaceNotFoundError
+    return workspace
+
+
+async def require_workspace_admin_membership(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    user_id: int,
+) -> Workspace:
+    workspace = await get_workspace_by_id(db, workspace_id)
+    member = await db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    if member is None:
+        raise WorkspaceNotFoundError
+    if member.role not in {"owner", "admin"}:
+        raise WorkspacePermissionError
+    return workspace
+
+
 async def add_workspace_member_by_email(
     db: AsyncSession,
     workspace_id: int,
@@ -158,6 +192,22 @@ async def add_workspace_member_by_email(
     await db.commit()
 
 
+async def add_workspace_member_to_workspace(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    actor_user_id: int,
+    email: str,
+    role: str,
+) -> None:
+    await require_workspace_admin_membership(
+        db,
+        workspace_id=workspace_id,
+        user_id=actor_user_id,
+    )
+    await add_workspace_member_by_email(db, workspace_id, email, role)
+
+
 async def update_workspace_member_role(
     db: AsyncSession,
     workspace_id: int,
@@ -179,3 +229,19 @@ async def update_workspace_member_role(
 
     member.role = role
     await db.commit()
+
+
+async def update_workspace_member_role_in_workspace(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    actor_user_id: int,
+    target_user_id: int,
+    role: str,
+) -> None:
+    await require_workspace_admin_membership(
+        db,
+        workspace_id=workspace_id,
+        user_id=actor_user_id,
+    )
+    await update_workspace_member_role(db, workspace_id, target_user_id, role)

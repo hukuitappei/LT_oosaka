@@ -50,6 +50,25 @@ const weeklyDigests = [
   },
 ]
 
+const learningItemsSummary = {
+  total_learning_items: 1,
+  current_week_count: 1,
+  weekly_points: [
+    {
+      year: 2026,
+      week: 13,
+      label: "2026-W13",
+      learning_count: 1,
+    },
+  ],
+  top_categories: [
+    {
+      category: "design",
+      count: 1,
+    },
+  ],
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" })
   res.end(JSON.stringify(payload))
@@ -70,6 +89,10 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 200, learningItems)
   }
 
+  if (req.method === "GET" && url.pathname === "/learning-items/summary") {
+    return sendJson(res, 200, learningItemsSummary)
+  }
+
   if (req.method === "GET" && url.pathname === "/weekly-digests/") {
     return sendJson(res, 200, weeklyDigests)
   }
@@ -81,8 +104,8 @@ const server = http.createServer((req, res) => {
   return sendJson(res, 404, { detail: "Not found" })
 })
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Mock API listening on http://127.0.0.1:${port}`)
+server.listen(port, "localhost", () => {
+  console.log(`Mock API listening on http://localhost:${port}`)
 })
 
 function shutdown() {
