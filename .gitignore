@@ -9,3 +9,7 @@ web/test-results/
 .pytest_cache/
 pytest-cache-files-*/
 .codex_sync_backup_*/
+LOG/
+.secret/
+*.log
+*.pem
