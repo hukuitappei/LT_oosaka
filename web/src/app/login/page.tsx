@@ -29,7 +29,7 @@ export default function LoginPage() {
       router.push("/")
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "エラーが発生しました")
+      setError(err instanceof Error ? err.message : "Authentication failed.")
     } finally {
       setLoading(false)
     }
@@ -43,7 +43,8 @@ export default function LoginPage() {
         </p>
         <h1 className="mb-2 text-center text-3xl font-semibold text-white">PR Knowledge Hub</h1>
         <p className="mb-6 text-center text-sm leading-6 text-stone-300">
-          PRレビューの指摘を、次回に活かせる学びとして蓄積します。
+          Capture pull request feedback, turn it into learning items, and track whether the team
+          actually applies the change.
         </p>
 
         <div className="mb-6 flex overflow-hidden rounded-xl border border-white/10">
@@ -56,7 +57,7 @@ export default function LoginPage() {
               setError("")
             }}
           >
-            ログイン
+            Log In
           </button>
           <button
             className={`flex-1 py-2 text-sm font-medium transition-colors ${
@@ -67,13 +68,13 @@ export default function LoginPage() {
               setError("")
             }}
           >
-            新規登録
+            Register
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-200">メールアドレス</label>
+            <label className="mb-1 block text-sm font-medium text-stone-200">Email Address</label>
             <input
               data-testid="login-email"
               type="email"
@@ -85,7 +86,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-200">パスワード</label>
+            <label className="mb-1 block text-sm font-medium text-stone-200">Password</label>
             <input
               data-testid="login-password"
               type="password"
@@ -93,12 +94,12 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-sm text-white placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              placeholder="8文字以上"
+              placeholder="Minimum 8 characters"
               minLength={8}
             />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
           <button
             data-testid="login-submit"
@@ -106,7 +107,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-xl bg-amber-300 py-2 text-sm font-medium text-stone-950 transition-colors hover:bg-amber-200 disabled:opacity-50"
           >
-            {loading ? "処理中..." : mode === "login" ? "ログイン" : "アカウントを作成"}
+            {loading ? "Working..." : mode === "login" ? "Log In" : "Create Account"}
           </button>
         </form>
       </div>

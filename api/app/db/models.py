@@ -172,6 +172,7 @@ class LearningItem(Base):
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
     pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id"))
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="new")
     visibility: Mapped[str] = mapped_column(String(32), default="private_draft")
     schema_version: Mapped[str] = mapped_column(String(10), default="1.0")
     title: Mapped[str] = mapped_column(String(255))

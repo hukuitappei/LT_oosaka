@@ -4,7 +4,7 @@ import NavBar from "@/components/NavBar"
 
 export const metadata: Metadata = {
   title: "PR Knowledge Hub",
-  description: "PRレビューの学びを週次で蓄積し、再利用できる知識として整理するツールです。",
+  description: "Turn pull request review feedback into reusable learning items and weekly digests.",
 }
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ja">
+    <html lang="en">
       <body className="bg-stone-950 text-stone-100">
         <NavBar />
         <main>{children}</main>

@@ -16,6 +16,7 @@ from app.services.workspaces import (
     WorkspaceUserNotFoundError,
     add_workspace_member_by_email,
     create_workspace,
+    get_workspace_by_id,
     get_user_workspace,
     list_user_workspaces,
     update_workspace_member_role,
@@ -111,8 +112,9 @@ async def add_workspace_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
+    try:
+        workspace = await get_workspace_by_id(db, workspace_id)
+    except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
     await require_workspace_role(
         {"owner", "admin"},
@@ -137,8 +139,9 @@ async def update_workspace_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
+    try:
+        workspace = await get_workspace_by_id(db, workspace_id)
+    except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
     await require_workspace_role(
         {"owner", "admin"},

@@ -2,6 +2,8 @@ import { getClientRequestHeaders, getToken } from "@/lib/auth"
 
 const API_URL = process.env.API_URL || "http://localhost:8000"
 
+export type LearningItemStatus = "new" | "in_progress" | "applied" | "ignored"
+
 export interface LearningItem {
   id: number
   pull_request_id: number
@@ -11,6 +13,7 @@ export interface LearningItem {
   confidence: number
   action_for_next_time: string
   evidence: string
+  status: LearningItemStatus
   visibility: string
   created_at: string
   repository: {
@@ -53,6 +56,10 @@ export interface LearningItemsSummary {
     category: string
     count: number
   }>
+  status_counts: Array<{
+    status: LearningItemStatus
+    count: number
+  }>
 }
 
 export interface Repository {
@@ -69,9 +76,19 @@ export interface TokenResponse {
   default_workspace_id: number
 }
 
-export interface ApiFetchOptions {
+type QueryValue = string | number | boolean | null | undefined
+
+export interface ApiRequestOptions {
   token?: string
   headers?: HeadersInit
+  query?: Record<string, QueryValue>
+  method?: string
+  body?: BodyInit | null
+}
+
+export interface UpdateLearningItemInput {
+  status?: LearningItemStatus
+  visibility?: string
 }
 
 function toHeaders(input?: HeadersInit): Headers {
@@ -102,7 +119,19 @@ function toHeaders(input?: HeadersInit): Headers {
   return headers
 }
 
-async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
+function buildUrl(path: string, query?: Record<string, QueryValue>): string {
+  const url = new URL(path, API_URL)
+  if (!query) return url.toString()
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === "") continue
+    url.searchParams.set(key, String(value))
+  }
+
+  return url.toString()
+}
+
+async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T | null> {
   const headers = toHeaders(options.headers)
   const token = options.token ?? getToken()
   const clientHeaders = getClientRequestHeaders()
@@ -118,9 +147,11 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
   }
 
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(buildUrl(path, options.query), {
+      method: options.method ?? "GET",
       cache: "no-store",
       headers,
+      body: options.body ?? null,
     })
     if (!res.ok) return null
     return res.json()
@@ -157,14 +188,36 @@ export async function register(email: string, password: string): Promise<TokenRe
 }
 
 export const api = {
-  getLearningItems: (options?: ApiFetchOptions) =>
-    apiFetch<LearningItem[]>("/learning-items/", options),
-  getLearningItemsSummary: (options?: ApiFetchOptions) =>
-    apiFetch<LearningItemsSummary>("/learning-items/summary", options),
-  getWeeklyDigests: (options?: ApiFetchOptions) =>
-    apiFetch<WeeklyDigest[]>("/weekly-digests/", options),
-  getWeeklyDigest: (id: number, options?: ApiFetchOptions) =>
-    apiFetch<WeeklyDigest>(`/weekly-digests/${id}`, options),
-  getRepositories: (options?: ApiFetchOptions) =>
-    apiFetch<Repository[]>("/repositories/", options),
+  getLearningItems: (
+    options?: ApiRequestOptions & {
+      query?: {
+        q?: string
+        repository_id?: number
+        pr_id?: number
+        category?: string
+        status?: LearningItemStatus
+        visibility?: string
+        limit?: number
+        offset?: number
+      }
+    },
+  ) => apiRequest<LearningItem[]>("/learning-items/", options),
+  getLearningItemsSummary: (options?: ApiRequestOptions & { query?: { weeks?: number } }) =>
+    apiRequest<LearningItemsSummary>("/learning-items/summary", options),
+  updateLearningItem: (id: number, input: UpdateLearningItemInput, options?: ApiRequestOptions) =>
+    apiRequest<LearningItem>(`/learning-items/${id}`, {
+      ...options,
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options?.headers ?? {}),
+      },
+      body: JSON.stringify(input),
+    }),
+  getWeeklyDigests: (options?: ApiRequestOptions) =>
+    apiRequest<WeeklyDigest[]>("/weekly-digests/", options),
+  getWeeklyDigest: (id: number, options?: ApiRequestOptions) =>
+    apiRequest<WeeklyDigest>(`/weekly-digests/${id}`, options),
+  getRepositories: (options?: ApiRequestOptions) =>
+    apiRequest<Repository[]>("/repositories/", options),
 }

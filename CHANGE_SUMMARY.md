@@ -7,6 +7,7 @@
 - frontend 側の文字化けと壊れた JSX を修正
 - learning items / weekly digests 周辺の共通文言を整理
 - backend 側の prompt、コメント、docstring の文字化けを UTF-8 前提で修復
+- dashboard / login / learning items / weekly digests の表示文言を英語ベースで統一
 
 ## アーキテクチャ整理
 
@@ -23,7 +24,9 @@
 - workspace の membership lookup と member 更新処理を `api/app/services/workspaces.py` へ移動
 - auth の session orchestration を `api/app/services/user_sessions.py` へ移動
 - GitHub OAuth callback の完了処理を `api/app/services/github_oauth.py` へ移動
+- GitHub connection の一覧 / 作成 / link / 削除処理を `api/app/services/github_connections.py` へ移動
 - auth の response schema を router から分離して `api/app/schemas/auth.py` を追加
+- workspace router に残っていた `db.get(...)` ベースの workspace lookup を service に集約
 
 ## テストと品質ゲート
 
@@ -36,12 +39,23 @@
 - weekly digest の router/service テストを分離
 - workspace の router/service テストを分離
 - auth の router/service テストを分離
+- learning item の status/filter/update 契約テストを追加
+- GitHub connection の router/service テストを追加
 - 境界整理に合わせて docs と decision record を都度更新
+
+## Learning Item 活用
+
+- `LearningItem.status` を追加し、`new` / `in_progress` / `applied` / `ignored` を管理可能にした
+- learning item 一覧 API に search / repository / PR / category / status / pagination を追加
+- `PATCH /learning-items/{id}` で status / visibility 更新を可能にした
+- summary API に `status_counts` を追加し、dashboard と learning items 画面に反映した
+- learning items 画面に filter UI と status 更新 UI を追加した
 
 ## 現在の検証状況
 
-- backend: `pytest -q api` で `86 passed`
+- backend: `pytest -q api` で `99 passed`
 - frontend: `npm run lint`
+- frontend: `npm run build`
 - frontend: `npm run test:e2e`
 - frontend CI: `npm run lint`、`npm run build`、browser E2E
 

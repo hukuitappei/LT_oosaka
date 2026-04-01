@@ -109,6 +109,16 @@ async def list_user_workspaces(
     return [(workspace, role) for workspace, role in result.all()]
 
 
+async def get_workspace_by_id(
+    db: AsyncSession,
+    workspace_id: int,
+) -> Workspace:
+    workspace = await db.get(Workspace, workspace_id)
+    if workspace is None:
+        raise WorkspaceNotFoundError
+    return workspace
+
+
 async def get_user_workspace(
     db: AsyncSession,
     workspace_id: int,
@@ -131,9 +141,7 @@ async def add_workspace_member_by_email(
     email: str,
     role: str,
 ) -> None:
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError
+    await get_workspace_by_id(db, workspace_id)
 
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
@@ -164,9 +172,7 @@ async def update_workspace_member_role(
     user_id: int,
     role: str,
 ) -> None:
-    workspace = await db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError
+    await get_workspace_by_id(db, workspace_id)
 
     member = await db.scalar(
         select(WorkspaceMember).where(

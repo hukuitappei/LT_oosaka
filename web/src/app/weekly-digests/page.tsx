@@ -10,25 +10,25 @@ export default async function WeeklyDigestsPage() {
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/" className="text-sm text-stone-400 hover:text-stone-200">
-          ← ダッシュボード
+          Dashboard
         </Link>
-        <h1 className="text-2xl font-semibold text-white">週次ダイジェスト</h1>
+        <h1 className="text-2xl font-semibold text-white">Weekly Digests</h1>
       </div>
 
       {!digests || digests.length === 0 ? (
-        <p className="text-stone-400">まだ週次ダイジェストはありません。</p>
+        <p className="text-stone-400">No weekly digests yet.</p>
       ) : (
         <div className="space-y-4">
           {digests.map((digest) => (
             <Link key={digest.id} href={`/weekly-digests/${digest.id}`}>
               <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 transition-colors hover:bg-white/10">
-                <div className="mb-2 flex items-start justify-between">
+                <div className="mb-2 flex items-start justify-between gap-4">
                   <span className="font-semibold text-white">
-                    {digest.year}年 第{digest.week}週
+                    {digest.year} Week {digest.week}
                   </span>
                   <div className="flex gap-3 text-xs text-stone-400">
-                    <span>PR {digest.pr_count}件</span>
-                    <span>学び {digest.learning_count}件</span>
+                    <span>PRs {digest.pr_count}</span>
+                    <span>Items {digest.learning_count}</span>
                   </div>
                 </div>
                 <p className="line-clamp-2 text-sm leading-6 text-stone-300">{digest.summary}</p>

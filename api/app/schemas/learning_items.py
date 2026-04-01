@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+LearningItemStatus = Literal["new", "in_progress", "applied", "ignored"]
 
 
 class RepositoryRef(BaseModel):
@@ -31,6 +34,7 @@ class LearningItemResponse(BaseModel):
     confidence: float
     action_for_next_time: str
     evidence: str
+    status: LearningItemStatus
     visibility: str
     created_at: datetime
     repository: RepositoryRef
@@ -51,8 +55,19 @@ class LearningItemsCategoryCount(BaseModel):
     count: int
 
 
+class LearningItemsStatusCount(BaseModel):
+    status: LearningItemStatus
+    count: int
+
+
 class LearningItemsSummaryResponse(BaseModel):
     total_learning_items: int
     current_week_count: int
     weekly_points: list[LearningItemsWeeklyPoint]
     top_categories: list[LearningItemsCategoryCount]
+    status_counts: list[LearningItemsStatusCount]
+
+
+class LearningItemUpdateRequest(BaseModel):
+    status: LearningItemStatus | None = None
+    visibility: str | None = None

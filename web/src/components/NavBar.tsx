@@ -31,28 +31,28 @@ export default function NavBar() {
           <Link href="/" className="font-semibold uppercase tracking-[0.18em] text-amber-300">
             PR Knowledge Hub
           </Link>
-          {authed && (
+          {authed ? (
             <>
               <Link href="/weekly-digests" className="text-sm text-stone-300 transition-colors hover:text-white">
-                週次ダイジェスト
+                Weekly Digests
               </Link>
               <Link href="/learning-items" className="text-sm text-stone-300 transition-colors hover:text-white">
-                学び
+                Learning Items
               </Link>
             </>
-          )}
+          ) : null}
         </div>
-        {authed && (
+        {authed ? (
           <div className="flex items-center gap-3">
-            {email && <span className="text-sm text-stone-500">{email}</span>}
+            {email ? <span className="text-sm text-stone-500">{email}</span> : null}
             <button
               onClick={handleLogout}
               className="text-sm text-stone-400 transition-colors hover:text-red-300"
             >
-              ログアウト
+              Log Out
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </nav>
   )

@@ -13,6 +13,7 @@ The active application is the `api/` FastAPI backend plus the `web/` Next.js fro
 - LLM-based learning extraction
 - Celery-based async extraction, digest generation, and PR reanalysis
 - Dashboard, learning items, and weekly digest pages
+- Learning item search, filtering, and status tracking (`new`, `in_progress`, `applied`, `ignored`)
 
 ## Architecture
 
@@ -53,7 +54,7 @@ cd api
 python -m venv .venv
 .venv\Scripts\activate
 python -m pip install -r requirements.txt -r requirements-test.txt
-alembic -c migrations/alembic.ini upgrade head
+alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -82,11 +83,6 @@ cd api
 celery -A app.celery_app beat --loglevel=info
 ```
 
-Weekly digest scheduling:
-
-- Default: every Monday at 09:00 in `Asia/Tokyo`
-- Override with `WEEKLY_DIGEST_SCHEDULE_MINUTE`, `WEEKLY_DIGEST_SCHEDULE_HOUR`, `WEEKLY_DIGEST_SCHEDULE_DAY_OF_WEEK`
-
 Demo data:
 
 ```bash
@@ -99,6 +95,24 @@ This creates a loginable demo account:
 - Email: `demo@example.com`
 - Password: `demo12345`
 
+## Learning Item Workflow
+
+### API
+
+- `GET /learning-items/`
+  - Supports `q`, `repository_id`, `pr_id`, `category`, `status`, `visibility`, `limit`, and `offset`
+- `GET /learning-items/summary`
+  - Returns `total_learning_items`, `current_week_count`, `weekly_points`, `top_categories`, and `status_counts`
+- `PATCH /learning-items/{item_id}`
+  - Updates `status` and/or `visibility`
+
+### Statuses
+
+- `new`
+- `in_progress`
+- `applied`
+- `ignored`
+
 ## Testing
 
 Backend:
@@ -108,18 +122,21 @@ cd api
 pytest -q
 ```
 
-Frontend build:
+Frontend:
 
 ```bash
 cd web
+npm run lint
 npm run build
+npm run test:e2e
 ```
 
-Current local verification at the time of the latest refactor:
+Current local verification as of 2026-04-01:
 
-- `api`: `77 passed`
-- `web`: lint passes before build in CI
-- `web`: production build succeeds
+- `api`: `94 passed`
+- `web`: `npm run lint` passes
+- `web`: `npm run build` passes
+- `web`: `npm run test:e2e` passes
 
 ## CI
 
@@ -127,6 +144,7 @@ GitHub Actions runs:
 
 - `api`: `pytest -q`
 - `web`: `npm ci && npm run lint && npm run build`
+- `web-e2e`: `npm ci && npx playwright install --with-deps chromium && npm run test:e2e`
 
 Workflow file:
 
@@ -139,8 +157,9 @@ Workflow file:
 3. Connect GitHub through the backend integration endpoints.
 4. Receive webhook-driven PR ingestion and extraction.
 5. Review learning items on `/learning-items`.
-6. Generate and read workspace-scoped digests on `/weekly-digests`.
-7. Reanalyze an existing PR through the API, executed asynchronously by Celery.
+6. Filter or search learning items and update their status.
+7. Generate and read workspace-scoped digests on `/weekly-digests`.
+8. Reanalyze an existing PR through the API, executed asynchronously by Celery.
 
 ## GitHub App Setup
 
@@ -162,12 +181,6 @@ GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE K
 GITHUB_WEBHOOK_SECRET=<random_webhook_secret>
 ```
 
-Notes:
-
-- `GITHUB_PRIVATE_KEY` must be the GitHub App private key in PEM format.
-- If you put it into `.env`, preserve line breaks with `\n`.
-- `GITHUB_WEBHOOK_SECRET` must match the secret configured in the GitHub App webhook settings.
-
 ### GitHub App Settings
 
 Repository permissions:
@@ -181,12 +194,6 @@ Subscribe to these webhook events:
 - `Pull request review`
 - `Pull request review comment`
 
-This app currently enqueues extraction for:
-
-- merged pull requests
-- submitted pull request reviews
-- created or edited pull request review comments
-
 ### Runtime Services
 
 For webhook processing to work, these services must be running:
@@ -197,69 +204,13 @@ For webhook processing to work, these services must be running:
 The `scheduler` service is not required for webhook ingestion itself.
 It is only used for periodic jobs such as weekly digest generation.
 
-### Public Reachability
-
-GitHub must be able to reach your API from the public internet.
-For local development, expose the API with a tunnel such as `ngrok` or `cloudflared`, then use:
-
-- `https://<public-host>/webhooks/github`
-
-### Link an Installation to a Workspace
-
-Webhook events are mapped to a workspace through `installation_id`.
-After installing the GitHub App on an account or organization, link that installation to a workspace with:
-
-- `POST /github-connections/app/link`
-
-Authenticated request body:
-
-```json
-{
-  "installation_id": 12345678,
-  "github_account_login": "your-org-or-user",
-  "label": "main github app connection",
-  "workspace_id": 1
-}
-```
-
-Example with `curl`:
-
-```bash
-curl -X POST http://localhost:8000/github-connections/app/link \
-  -H "Authorization: Bearer <access-token>" \
-  -H "Content-Type: application/json" \
-  -H "X-Workspace-Id: 1" \
-  -d "{\"installation_id\":12345678,\"github_account_login\":\"your-org\",\"label\":\"main github app connection\",\"workspace_id\":1}"
-```
-
-Once linked, webhook events carrying that `installation_id` will be resolved to the workspace and processed asynchronously.
-
-### Recommended Verification Flow
-
-1. Start `api`, `worker`, and optionally `scheduler`.
-2. Configure the GitHub App webhook URL as `https://<your-api-host>/webhooks/github`.
-3. Install the GitHub App into the target repository or organization.
-4. Link the returned `installation_id` to your workspace via `/github-connections/app/link`.
-5. Open a PR, submit a review, or add a review comment.
-6. Confirm the API logs show `Webhook received ...`.
-7. Confirm the worker logs show `extract_pr_task started ...`.
-8. Check `/learning-items` after extraction completes.
-
 ## Development Notes
 
 - The fixture-backed `/analyze` router is intentionally excluded from `app.main:app`.
 - `api/fixtures/` is a development and test aid for extraction behavior, not a production API surface.
-- `web` CI runs both `npm run lint` and `npm run build`.
-- Webhook, Celery, and digest logs include stable tracing fields such as `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week`.
-- 直近の整理・修正内容の日本語サマリは `CHANGE_SUMMARY.md` に記録しています。
-
-## Key Decisions Reflected in the Current Code
-
 - `workspace` is the primary ownership boundary.
-- Weekly digests are listed and generated by `workspace_id`.
 - Heavy background work uses Celery instead of FastAPI `BackgroundTasks`.
-- LLM providers implement a common `BaseLLMProvider` contract.
-- Tests are aligned to current contracts rather than internal call-count details.
+- Webhook, Celery, and digest logs include stable tracing fields such as `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week`.
 
 ## Required Environment Variables
 
