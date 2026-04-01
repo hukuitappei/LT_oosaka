@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
 from app.services.pull_requests import (
     PullRequestNotFoundError,
+    get_related_learning_items_for_pull_request,
     get_workspace_pull_request,
     request_reanalysis_for_pull_request,
 )
@@ -26,10 +27,35 @@ class LearningItemOut(BaseModel):
     confidence: float
     action_for_next_time: str
     evidence: str
+    status: str
     visibility: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PullRequestRefOut(BaseModel):
+    id: int
+    github_pr_number: int
+    title: str
+    github_url: str
+
+    model_config = {"from_attributes": True}
+
+
+class RepositoryRefOut(BaseModel):
+    id: int
+    full_name: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class RelatedLearningItemOut(LearningItemOut):
+    repository: RepositoryRefOut
+    pull_request: PullRequestRefOut
+    matched_terms: list[str]
+    same_repository: bool
 
 
 class PullRequestDetail(BaseModel):
@@ -42,6 +68,7 @@ class PullRequestDetail(BaseModel):
     processed: bool
     created_at: datetime
     learning_items: list[LearningItemOut] = []
+    related_learning_items: list[RelatedLearningItemOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -62,7 +89,20 @@ async def get_pull_request(
     pr = await get_workspace_pull_request(db, pr_id, current_workspace.id)
     if not pr:
         raise HTTPException(status_code=404, detail="Pull request not found")
-    return pr
+    related_items = await get_related_learning_items_for_pull_request(db, pr, current_workspace.id)
+    return {
+        **PullRequestDetail.model_validate(pr).model_dump(),
+        "related_learning_items": [
+            {
+                **LearningItemOut.model_validate(match.item).model_dump(),
+                "repository": RepositoryRefOut.model_validate(match.item.pull_request.repository).model_dump(),
+                "pull_request": PullRequestRefOut.model_validate(match.item.pull_request).model_dump(),
+                "matched_terms": match.matched_terms,
+                "same_repository": match.same_repository,
+            }
+            for match in related_items
+        ],
+    }
 
 
 @router.post("/{pr_id}/reanalyze")

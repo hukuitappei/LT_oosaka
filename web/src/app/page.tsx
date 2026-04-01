@@ -98,14 +98,19 @@ export default async function Home() {
                   <p className="mb-3 text-sm leading-6 text-stone-300">{item.detail}</p>
                   <div className="flex items-center justify-between text-sm text-stone-300">
                     <span>{LEARNING_STATUS_LABELS[item.status]}</span>
-                    <a
-                      href={item.pull_request.github_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-300 hover:text-sky-200"
-                    >
-                      Open PR
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <Link href={`/pull-requests/${item.pull_request.id}`} className="text-amber-300 hover:text-amber-200">
+                        Review insights
+                      </Link>
+                      <a
+                        href={item.pull_request.github_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sky-300 hover:text-sky-200"
+                      >
+                        Open PR
+                      </a>
+                    </div>
                   </div>
                 </article>
               ))}

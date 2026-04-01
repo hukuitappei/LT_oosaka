@@ -13,6 +13,7 @@ The project is past the initial MVP stage. The current codebase supports:
 - a working Next.js frontend
 - backend tests and frontend production build checks
 - structured tracing logs for webhook, Celery, and digest workflows
+- learning item search, status tracking, and PR-level related learning suggestions
 
 ## Completed Milestones
 
@@ -73,6 +74,15 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - Playwright-based browser E2E smoke flow added for authenticated navigation
 - backend tests updated to current contracts
 
+### Phase 8: Learning Activation
+
+- learning item `status` added with `new`, `in_progress`, `applied`, and `ignored`
+- learning item list expanded with search, repository filter, PR filter, status filter, and pagination
+- learning item summary expanded with `status_counts`
+- learning item status updates exposed through `PATCH /learning-items/{id}`
+- dashboard and learning item UI updated to support operating on learning items instead of only reading them
+- PR detail flow expanded with related learning suggestions from earlier pull requests in the same workspace
+
 ## Current Architecture Direction
 
 ### Domain
@@ -80,6 +90,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - `workspace` is the primary ownership boundary
 - `user` is the authentication actor
 - digest generation and listing are workspace-scoped
+- learning items are not just records; they are meant to be carried forward into later pull requests
 
 ### Service Boundaries
 
@@ -100,15 +111,21 @@ Current status: the fixture-backed analysis path is retained as a development/te
 ### Quality
 
 - backend quality gate: `pytest -q`
-- frontend quality gate: `npm run lint` followed by `npm run build`
+- frontend quality gate: `npm run lint`, `npm run build`, and browser E2E for the authenticated flow
 - CI enforces both on push and pull request
+
+### Product Direction
+
+- the product should differentiate on reuse of review knowledge, not only storage of extracted learnings
+- PR-level related learning suggestions are now part of the intended surface
+- dashboard and PR detail views should continue moving toward "what should we avoid repeating next" rather than passive reporting
 
 ## Remaining Work
 
 ### High Priority
 
 1. Continue moving remaining route-owned query/orchestration logic behind service APIs.
-2. Review remaining routers for mixed query logic after the repository and learning item cleanup.
+2. Expand related learning suggestions beyond simple token overlap into stronger ranking and recurrence detection.
 3. Expand browser E2E beyond the initial smoke path without making the suite brittle.
 
 ### Medium Priority
@@ -116,6 +133,7 @@ Current status: the fixture-backed analysis path is retained as a development/te
 1. Decide whether Docker Compose or local scripts are the primary development path.
 2. Add better observability for Celery task failures and webhook processing.
 3. Tighten GitHub connection flows and repository synchronization UX.
+4. Expose related learning suggestions earlier in the workflow, not only from the PR detail page.
 
 ### Low Priority
 

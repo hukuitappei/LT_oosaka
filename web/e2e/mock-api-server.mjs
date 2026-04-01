@@ -61,6 +61,48 @@ const weeklyDigests = [
   },
 ]
 
+const pullRequestDetails = {
+  42: {
+    id: 42,
+    github_pr_number: 42,
+    title: "Tighten validation",
+    state: "merged",
+    author: "alice",
+    github_url: "https://github.com/acme/review-hub/pull/42",
+    processed: true,
+    created_at: "2026-03-27T00:00:00Z",
+    learning_items: learningItems,
+    related_learning_items: [
+      {
+        id: 2,
+        pull_request_id: 30,
+        title: "Validate before persistence",
+        detail: "Move validation into the API layer before saving records.",
+        category: "design",
+        confidence: 0.95,
+        action_for_next_time: "Check boundary validation before storage writes.",
+        evidence: "A prior review flagged missing validation before persistence.",
+        status: "applied",
+        visibility: "workspace_shared",
+        created_at: "2026-03-20T00:00:00Z",
+        repository: {
+          id: 10,
+          full_name: "acme/review-hub",
+          name: "review-hub",
+        },
+        pull_request: {
+          id: 30,
+          github_pr_number: 30,
+          title: "Previous validation fix",
+          github_url: "https://github.com/acme/review-hub/pull/30",
+        },
+        matched_terms: ["persistence", "validation"],
+        same_repository: true,
+      },
+    ],
+  },
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" })
   res.end(JSON.stringify(payload))
@@ -160,6 +202,10 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/1") {
     return sendJson(res, 200, weeklyDigests[0])
+  }
+
+  if (req.method === "GET" && url.pathname === "/pull-requests/42") {
+    return sendJson(res, 200, pullRequestDetails[42])
   }
 
   return sendJson(res, 404, { detail: "Not found" })

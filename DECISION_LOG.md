@@ -139,6 +139,25 @@ Affected areas:
 - `api/tests/test_learning_items_router.py`
 - `api/tests/test_learning_items_service.py`
 
+## Decision 9: Learning Items Must Be Reused In Later PRs
+
+- Status: active
+- Decision: extracted learning items should be surfaced back into later pull requests as related guidance, not only stored in lists and digests
+- Reason: the product is more valuable when it helps prevent repeated review feedback before it happens again
+- Consequence: PR detail and future workflow surfaces should include ranked related learnings from the same workspace
+
+Affected areas:
+
+- `api/app/services/pull_requests.py`
+- `api/app/routers/pull_requests.py`
+- `web/src/app/pull-requests/[id]/page.tsx`
+- `web/src/app/page.tsx`
+- `web/src/components/LearningItemsBoard.tsx`
+- `web/src/lib/api.ts`
+- `api/tests/test_pull_requests_service.py`
+- `api/tests/test_pull_requests_reanalyze.py`
+- `web/e2e/auth-dashboard.spec.ts`
+
 ## Known Transitional State
 
 These are acknowledged but not yet fully resolved:

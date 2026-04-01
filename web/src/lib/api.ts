@@ -70,6 +70,39 @@ export interface Repository {
   created_at: string
 }
 
+export interface PullRequestDetailLearningItem {
+  id: number
+  title: string
+  detail: string
+  category: string
+  confidence: number
+  action_for_next_time: string
+  evidence: string
+  status: LearningItemStatus
+  visibility: string
+  created_at: string
+}
+
+export interface RelatedLearningItem extends LearningItem {
+  repository: LearningItem["repository"]
+  pull_request: LearningItem["pull_request"]
+  matched_terms: string[]
+  same_repository: boolean
+}
+
+export interface PullRequestDetail {
+  id: number
+  github_pr_number: number
+  title: string
+  state: string
+  author: string
+  github_url: string
+  processed: boolean
+  created_at: string
+  learning_items: PullRequestDetailLearningItem[]
+  related_learning_items: RelatedLearningItem[]
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string
@@ -218,6 +251,8 @@ export const api = {
     apiRequest<WeeklyDigest[]>("/weekly-digests/", options),
   getWeeklyDigest: (id: number, options?: ApiRequestOptions) =>
     apiRequest<WeeklyDigest>(`/weekly-digests/${id}`, options),
+  getPullRequest: (id: number, options?: ApiRequestOptions) =>
+    apiRequest<PullRequestDetail>(`/pull-requests/${id}`, options),
   getRepositories: (options?: ApiRequestOptions) =>
     apiRequest<Repository[]>("/repositories/", options),
 }

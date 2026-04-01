@@ -72,6 +72,9 @@ export function LearningItemsBoard({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-400">
                 <span>{item.repository.full_name}</span>
                 <span>PR #{item.pull_request.github_pr_number}</span>
+                <a href={`/pull-requests/${item.pull_request.id}`} className="text-amber-300 hover:text-amber-200">
+                  Review insights
+                </a>
                 <a
                   href={item.pull_request.github_url}
                   target="_blank"

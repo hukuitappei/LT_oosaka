@@ -35,6 +35,10 @@ test("redirects anonymous users and renders authenticated pages with seeded auth
   const appliedButton = firstCard.getByRole("button", { name: "Applied" })
   await appliedButton.click()
   await expect(appliedButton).toBeDisabled()
+  await firstCard.getByRole("link", { name: "Review insights" }).click()
+  await expect(page).toHaveURL(/\/pull-requests\/42$/)
+  await expect(page.getByText("Before You Repeat This")).toBeVisible()
+  await expect(page.getByText("Validate before persistence").first()).toBeVisible()
 
   await page.getByRole("navigation").getByRole("link", { name: "Weekly Digests" }).click()
   await expect(page).toHaveURL(/\/weekly-digests$/)
