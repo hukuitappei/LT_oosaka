@@ -109,50 +109,60 @@ async def _get_or_create_pull_request(
     return pull_request
 
 
-async def _get_or_create_learning_item(
+async def _sync_learning_items_for_pull_request(
     db: AsyncSession,
     *,
     workspace_id: int,
     pull_request_id: int,
-    title: str,
-    detail: str,
-    category: str,
-    confidence: float,
-    action_for_next_time: str,
-    evidence: str,
-    visibility: str,
-) -> LearningItem:
-    item = await db.scalar(
-        select(LearningItem).where(
-            LearningItem.workspace_id == workspace_id,
-            LearningItem.pull_request_id == pull_request_id,
-            LearningItem.title == title,
+    items: list[dict[str, str | float]],
+) -> list[LearningItem]:
+    existing = list(
+        (
+            await db.execute(
+                select(LearningItem)
+                .where(
+                    LearningItem.workspace_id == workspace_id,
+                    LearningItem.pull_request_id == pull_request_id,
+                )
+                .order_by(LearningItem.id.asc())
+            )
         )
+        .scalars()
+        .all()
     )
-    if item is not None:
-        item.detail = detail
-        item.category = category
-        item.confidence = confidence
-        item.action_for_next_time = action_for_next_time
-        item.evidence = evidence
-        item.visibility = visibility
-        return item
 
-    item = LearningItem(
-        workspace_id=workspace_id,
-        pull_request_id=pull_request_id,
-        schema_version="1.0",
-        title=title,
-        detail=detail,
-        category=category,
-        confidence=confidence,
-        action_for_next_time=action_for_next_time,
-        evidence=evidence,
-        visibility=visibility,
-    )
-    db.add(item)
-    await db.flush()
-    return item
+    synced: list[LearningItem] = []
+    for item_model, item_spec in zip(existing, items):
+        item_model.title = str(item_spec["title"])
+        item_model.detail = str(item_spec["detail"])
+        item_model.category = str(item_spec["category"])
+        item_model.confidence = float(item_spec["confidence"])
+        item_model.action_for_next_time = str(item_spec["action"])
+        item_model.evidence = str(item_spec["evidence"])
+        item_model.visibility = str(item_spec["visibility"])
+        synced.append(item_model)
+
+    for item_spec in items[len(existing):]:
+        item_model = LearningItem(
+            workspace_id=workspace_id,
+            pull_request_id=pull_request_id,
+            schema_version="1.0",
+            title=str(item_spec["title"]),
+            detail=str(item_spec["detail"]),
+            category=str(item_spec["category"]),
+            confidence=float(item_spec["confidence"]),
+            action_for_next_time=str(item_spec["action"]),
+            evidence=str(item_spec["evidence"]),
+            visibility=str(item_spec["visibility"]),
+        )
+        db.add(item_model)
+        await db.flush()
+        synced.append(item_model)
+
+    for extra in existing[len(items):]:
+        await db.delete(extra)
+
+    return synced
 
 
 async def _get_or_create_digest(
@@ -222,28 +232,28 @@ async def seed_demo_data(
             "full_name": "demo/pr-knowledge-hub-api",
             "name": "pr-knowledge-hub-api",
             "pr_number": 14,
-            "title": "Tighten webhook processing and repository scoping",
-            "body": "Improves workspace-aware repository resolution and processing safety.",
+            "title": "Webhook 処理とリポジトリ境界を強化する",
+            "body": "ワークスペース単位で安全にリポジトリを解決し、Webhook 処理を安定させる変更。",
             "author": "demo-bot",
             "url": "https://github.com/demo/pr-knowledge-hub-api/pull/14",
             "merged_at": datetime(2026, 3, 24, 10, 0, tzinfo=timezone.utc),
             "items": [
                 {
-                    "title": "Filter repository data by workspace first",
-                    "detail": "Queries that join pull requests and repositories should scope by workspace to avoid cross-tenant reads.",
+                    "title": "リポジトリ関連データは先にワークスペースで絞り込む",
+                    "detail": "PR とリポジトリを結合するクエリは、最初にワークスペース境界で絞り込まないと他テナントの情報を混ぜる危険がある。",
                     "category": "security",
                     "confidence": 0.94,
-                    "action": "Start list/detail queries from the workspace boundary, then join outward.",
-                    "evidence": "Repository and learning item endpoints now enforce the active workspace before returning data.",
+                    "action": "一覧や詳細の取得は、ワークスペース条件を起点にしてから関連テーブルを結合する。",
+                    "evidence": "リポジトリ API と学び API は、レスポンスを返す前にアクティブなワークスペースで必ず絞り込むようになった。",
                     "visibility": "workspace_shared",
                 },
                 {
-                    "title": "Keep webhook ingestion idempotent",
-                    "detail": "Webhook retries are normal, so repository and PR upserts should tolerate repeated delivery without duplicating records.",
+                    "title": "Webhook 取り込みは冪等に保つ",
+                    "detail": "Webhook は再送される前提なので、リポジトリや PR の upsert は同じイベントが複数回来ても重複登録しない設計にする必要がある。",
                     "category": "design",
                     "confidence": 0.89,
-                    "action": "Use stable lookup keys like workspace + full_name and repository + PR number before insert.",
-                    "evidence": "The processor already resolves repositories and PRs using GitHub identifiers and workspace scope.",
+                    "action": "登録前に、workspace + full_name や repository + PR 番号のような安定キーで既存データを確認する。",
+                    "evidence": "現在のプロセッサは、GitHub ID とワークスペース情報を使ってリポジトリと PR を解決している。",
                     "visibility": "workspace_shared",
                 },
             ],
@@ -253,28 +263,28 @@ async def seed_demo_data(
             "full_name": "demo/pr-knowledge-hub-web",
             "name": "pr-knowledge-hub-web",
             "pr_number": 21,
-            "title": "Improve dashboard empty states and workspace context",
-            "body": "Adds clearer page copy and uses the stored workspace context on the client.",
+            "title": "ダッシュボードの空状態とワークスペース文脈を改善する",
+            "body": "ページ文言を整理し、クライアント側で保持したワークスペース文脈を使う変更。",
             "author": "demo-bot",
             "url": "https://github.com/demo/pr-knowledge-hub-web/pull/21",
             "merged_at": datetime(2026, 3, 25, 13, 30, tzinfo=timezone.utc),
             "items": [
                 {
-                    "title": "Persist active workspace on login",
-                    "detail": "The first post-login experience is smoother when the default workspace is stored immediately.",
+                    "title": "ログイン時にアクティブなワークスペースを保持する",
+                    "detail": "ログイン直後に既定ワークスペースを保存しておくと、最初の画面遷移から正しい文脈でデータを表示できる。",
                     "category": "design",
                     "confidence": 0.91,
-                    "action": "Write the returned default workspace id into both local storage and cookie-backed request context.",
-                    "evidence": "The login page now stores `default_workspace_id` and the API client forwards it as `X-Workspace-Id`.",
+                    "action": "返ってきた default_workspace_id を localStorage と Cookie の両方に保存して、以後の API 呼び出しで送る。",
+                    "evidence": "ログイン画面は `default_workspace_id` を保存し、API クライアントは `X-Workspace-Id` として送るようになっている。",
                     "visibility": "workspace_shared",
                 },
                 {
-                    "title": "Show evidence and next action together",
-                    "detail": "Learning items are easier to reuse when the reason and the future action are visible in the same card.",
+                    "title": "根拠と次回アクションを同じカードで見せる",
+                    "detail": "学びは、なぜそう言えるのかと次に何をするのかが同じ場所で見えた方が再利用しやすい。",
                     "category": "code_quality",
                     "confidence": 0.86,
-                    "action": "Keep cards structured as issue, evidence, and next action instead of a flat summary blob.",
-                    "evidence": "The home page and learning item list now render evidence and action blocks separately.",
+                    "action": "カードは単なる要約文ではなく、論点・根拠・次回アクションの構造を保って表示する。",
+                    "evidence": "ホーム画面と学び一覧では、根拠と次回アクションを別ブロックで表示している。",
                     "visibility": "workspace_shared",
                 },
             ],
@@ -307,35 +317,28 @@ async def seed_demo_data(
         )
         pull_requests.append(pull_request)
 
-        for item_spec in spec["items"]:
-            learning_items.append(
-                await _get_or_create_learning_item(
-                    db,
-                    workspace_id=workspace.id,
-                    pull_request_id=pull_request.id,
-                    title=item_spec["title"],
-                    detail=item_spec["detail"],
-                    category=item_spec["category"],
-                    confidence=item_spec["confidence"],
-                    action_for_next_time=item_spec["action"],
-                    evidence=item_spec["evidence"],
-                    visibility=item_spec["visibility"],
-                )
+        learning_items.extend(
+            await _sync_learning_items_for_pull_request(
+                db,
+                workspace_id=workspace.id,
+                pull_request_id=pull_request.id,
+                items=spec["items"],
             )
+        )
 
     digest = await _get_or_create_digest(
         db,
         workspace_id=workspace.id,
         year=target_year,
         week=target_week,
-        summary="Workspace-scoped reads, stable PR ingestion, and clearer learning cards are the strongest recurring improvements this week.",
+        summary="今週は、ワークスペース境界を守る取得処理、冪等な PR 取り込み、そして学びカードの見せ方の改善が大きな前進だった。",
         repeated_issues=[
-            "Data access needs an explicit workspace boundary on every list and detail path.",
-            "Review feedback becomes reusable only when evidence and next action are stored together.",
+            "一覧と詳細の両方で、常にワークスペース境界を明示しないとデータの混在が起きやすい。",
+            "レビュー指摘は、根拠と次回アクションをセットで残さないと再利用しにくい。",
         ],
         next_time_notes=[
-            "Add seed data whenever a new page is introduced so empty-state regressions are visible early.",
-            "Keep webhook processing idempotent before expanding GitHub integration breadth.",
+            "新しい画面を追加したら、空状態だけでなくデモデータも先に用意して見え方を確認する。",
+            "GitHub 連携の対象を広げる前に、Webhook 処理の冪等性を崩さないことを優先する。",
         ],
         pr_count=len(pull_requests),
         learning_count=len(learning_items),

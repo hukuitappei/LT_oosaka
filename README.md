@@ -19,6 +19,7 @@ The active application is the `api/` FastAPI backend plus the `web/` Next.js fro
 - `web/`: Next.js app for end users
 - `api/`: FastAPI backend
 - `worker`: Celery worker using the same `api/` image
+- `scheduler`: Celery Beat scheduler for periodic jobs
 - `db`: PostgreSQL in Docker Compose, SQLite for lighter local work
 - `cache`: Redis for Celery
 - `llm`: Ollama for local model access
@@ -73,6 +74,18 @@ Worker:
 cd api
 celery -A app.celery_app worker --loglevel=info
 ```
+
+Scheduler:
+
+```bash
+cd api
+celery -A app.celery_app beat --loglevel=info
+```
+
+Weekly digest scheduling:
+
+- Default: every Monday at 09:00 in `Asia/Tokyo`
+- Override with `WEEKLY_DIGEST_SCHEDULE_MINUTE`, `WEEKLY_DIGEST_SCHEDULE_HOUR`, `WEEKLY_DIGEST_SCHEDULE_DAY_OF_WEEK`
 
 Demo data:
 
@@ -129,6 +142,109 @@ Workflow file:
 6. Generate and read workspace-scoped digests on `/weekly-digests`.
 7. Reanalyze an existing PR through the API, executed asynchronously by Celery.
 
+## GitHub App Setup
+
+The webhook ingestion path in this repository is:
+
+- Webhook URL: `https://<your-api-host>/webhooks/github`
+
+Example local tunnel URL:
+
+- `https://<your-ngrok-subdomain>.ngrok.app/webhooks/github`
+
+### Required Environment Variables
+
+Set these in `.env` for GitHub App based webhook ingestion:
+
+```env
+GITHUB_APP_ID=<github_app_id>
+GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=<random_webhook_secret>
+```
+
+Notes:
+
+- `GITHUB_PRIVATE_KEY` must be the GitHub App private key in PEM format.
+- If you put it into `.env`, preserve line breaks with `\n`.
+- `GITHUB_WEBHOOK_SECRET` must match the secret configured in the GitHub App webhook settings.
+
+### GitHub App Settings
+
+Repository permissions:
+
+- `Metadata`: `Read-only`
+- `Pull requests`: `Read-only`
+
+Subscribe to these webhook events:
+
+- `Pull request`
+- `Pull request review`
+- `Pull request review comment`
+
+This app currently enqueues extraction for:
+
+- merged pull requests
+- submitted pull request reviews
+- created or edited pull request review comments
+
+### Runtime Services
+
+For webhook processing to work, these services must be running:
+
+- `api`
+- `worker`
+
+The `scheduler` service is not required for webhook ingestion itself.
+It is only used for periodic jobs such as weekly digest generation.
+
+### Public Reachability
+
+GitHub must be able to reach your API from the public internet.
+For local development, expose the API with a tunnel such as `ngrok` or `cloudflared`, then use:
+
+- `https://<public-host>/webhooks/github`
+
+### Link an Installation to a Workspace
+
+Webhook events are mapped to a workspace through `installation_id`.
+After installing the GitHub App on an account or organization, link that installation to a workspace with:
+
+- `POST /github-connections/app/link`
+
+Authenticated request body:
+
+```json
+{
+  "installation_id": 12345678,
+  "github_account_login": "your-org-or-user",
+  "label": "main github app connection",
+  "workspace_id": 1
+}
+```
+
+Example with `curl`:
+
+```bash
+curl -X POST http://localhost:8000/github-connections/app/link \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Workspace-Id: 1" \
+  -d "{\"installation_id\":12345678,\"github_account_login\":\"your-org\",\"label\":\"main github app connection\",\"workspace_id\":1}"
+```
+
+Once linked, webhook events carrying that `installation_id` will be resolved to the workspace and processed asynchronously.
+
+### Recommended Verification Flow
+
+1. Start `api`, `worker`, and optionally `scheduler`.
+2. Configure the GitHub App webhook URL as `https://<your-api-host>/webhooks/github`.
+3. Install the GitHub App into the target repository or organization.
+4. Link the returned `installation_id` to your workspace via `/github-connections/app/link`.
+5. Open a PR, submit a review, or add a review comment.
+6. Confirm the API logs show `Webhook received ...`.
+7. Confirm the worker logs show `extract_pr_task started ...`.
+8. Check `/learning-items` after extraction completes.
+
 ## Development Notes
 
 - The fixture-backed `/analyze` router is intentionally excluded from `app.main:app`.
@@ -155,6 +271,9 @@ Defined in `.env.example`:
 - `OLLAMA_BASE_URL`
 - `SECRET_KEY`
 - `APP_ENV`
+- `WEEKLY_DIGEST_SCHEDULE_MINUTE`
+- `WEEKLY_DIGEST_SCHEDULE_HOUR`
+- `WEEKLY_DIGEST_SCHEDULE_DAY_OF_WEEK`
 - `CORS_ORIGINS`
 - `GITHUB_APP_ID`
 - `GITHUB_PRIVATE_KEY`

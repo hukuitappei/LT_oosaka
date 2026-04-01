@@ -9,6 +9,12 @@ celery_app = Celery(
     include=["app.tasks.extract"],
 )
 
+weekly_digest_cron = crontab(
+    minute=settings.weekly_digest_schedule_minute,
+    hour=settings.weekly_digest_schedule_hour,
+    day_of_week=settings.weekly_digest_schedule_day_of_week,
+)
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
@@ -18,7 +24,7 @@ celery_app.conf.update(
     beat_schedule={
         "generate-weekly-digests": {
             "task": "app.tasks.extract.generate_scheduled_weekly_digests_task",
-            "schedule": crontab(minute=0, hour=9, day_of_week="mon"),
+            "schedule": weekly_digest_cron,
         }
     },
 )

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     cors_origins: list[str] = ["http://localhost:3000"]
     app_env: str = "production"
+    weekly_digest_schedule_minute: int = 0
+    weekly_digest_schedule_hour: int = 9
+    weekly_digest_schedule_day_of_week: str = "mon"
     # GitHub App
     github_app_id: str = ""
     github_private_key: str = ""
