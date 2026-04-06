@@ -6,7 +6,20 @@ import {
   LEARNING_STATUS_COLORS,
   LEARNING_STATUS_LABELS,
 } from "@/lib/learning-item-labels"
+import type { RelatedLearningItem } from "@/lib/api"
 import { getRequestContextHeaders } from "@/lib/request-context"
+
+const MATCH_TYPE_LABELS: Record<RelatedLearningItem["match_types"][number], string> = {
+  content_match: "Content match",
+  review_match: "Review match",
+  file_path_match: "File path match",
+}
+
+const MATCH_TYPE_COLORS: Record<RelatedLearningItem["match_types"][number], string> = {
+  content_match: "border-sky-300/20 bg-sky-300/10 text-sky-100",
+  review_match: "border-amber-300/20 bg-amber-300/10 text-amber-100",
+  file_path_match: "border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-100",
+}
 
 export default async function PullRequestDetailPage({
   params,
@@ -105,11 +118,34 @@ export default async function PullRequestDetailPage({
                         Same repository
                       </span>
                     ) : null}
+                    <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100">
+                      Priority {item.relevance_score}
+                    </span>
                   </div>
                   <p className="mb-2 text-xs uppercase tracking-[0.18em] text-stone-500">
                     {item.repository.full_name} / PR #{item.pull_request.github_pr_number}
                   </p>
                   <p className="mb-3 text-sm leading-6 text-stone-300">{item.detail}</p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {item.match_types.map((type) => (
+                      <span
+                        key={type}
+                        className={`rounded-full border px-2 py-0.5 text-xs ${MATCH_TYPE_COLORS[type]}`}
+                      >
+                        {MATCH_TYPE_LABELS[type]}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {item.recommendation_reasons.map((reason) => (
+                      <span
+                        key={reason}
+                        className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-0.5 text-xs text-emerald-100"
+                      >
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
                   <div className="mb-3 flex flex-wrap gap-2">
                     {item.matched_terms.map((term) => (
                       <span key={term} className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-xs text-sky-100">

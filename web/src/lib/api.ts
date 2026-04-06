@@ -31,6 +31,7 @@ export interface LearningItem {
 
 export interface WeeklyDigest {
   id: number
+  space_id?: number
   workspace_id: number
   year: number
   week: number
@@ -87,7 +88,10 @@ export interface RelatedLearningItem extends LearningItem {
   repository: LearningItem["repository"]
   pull_request: LearningItem["pull_request"]
   matched_terms: string[]
+  match_types: Array<"content_match" | "review_match" | "file_path_match">
   same_repository: boolean
+  relevance_score: number
+  recommendation_reasons: string[]
 }
 
 export interface PullRequestDetail {
@@ -106,7 +110,40 @@ export interface PullRequestDetail {
 export interface TokenResponse {
   access_token: string
   token_type: string
+  default_space_id: number
   default_workspace_id: number
+}
+
+export interface SpaceSummary {
+  id: number
+  name: string
+  slug: string
+  is_personal: boolean
+  role: string
+}
+
+export interface UserProfile {
+  id: number
+  email: string
+  github_login: string | null
+  is_active: boolean
+  created_at: string
+  spaces: SpaceSummary[]
+  workspaces: SpaceSummary[]
+}
+
+export interface SpaceContext extends SpaceSummary {
+  created_at: string
+}
+
+export interface SpaceSettings {
+  workspace_id: number
+  display_name: string
+  description: string | null
+  default_visibility: string
+  active_goal: string | null
+  active_focus_labels: string[]
+  primary_repository_ids: number[]
 }
 
 type QueryValue = string | number | boolean | null | undefined
@@ -173,6 +210,10 @@ async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Pro
     headers.set("Authorization", `Bearer ${token}`)
   } else if (clientHeaders.Authorization) {
     headers.set("Authorization", clientHeaders.Authorization)
+  }
+
+  if (!headers.has("X-Space-Id") && clientHeaders["X-Space-Id"]) {
+    headers.set("X-Space-Id", clientHeaders["X-Space-Id"])
   }
 
   if (!headers.has("X-Workspace-Id") && clientHeaders["X-Workspace-Id"]) {
@@ -251,6 +292,11 @@ export const api = {
     apiRequest<WeeklyDigest[]>("/weekly-digests/", options),
   getWeeklyDigest: (id: number, options?: ApiRequestOptions) =>
     apiRequest<WeeklyDigest>(`/weekly-digests/${id}`, options),
+  getCurrentUserProfile: (options?: ApiRequestOptions) => apiRequest<UserProfile>("/auth/me", options),
+  getSpaces: (options?: ApiRequestOptions) => apiRequest<SpaceSummary[]>("/spaces/", options),
+  getCurrentSpace: (options?: ApiRequestOptions) => apiRequest<SpaceContext>("/spaces/current/context", options),
+  getSpaceSettings: (id: number, options?: ApiRequestOptions) =>
+    apiRequest<SpaceSettings>(`/spaces/${id}/settings`, options),
   getPullRequest: (id: number, options?: ApiRequestOptions) =>
     apiRequest<PullRequestDetail>(`/pull-requests/${id}`, options),
   getRepositories: (options?: ApiRequestOptions) =>

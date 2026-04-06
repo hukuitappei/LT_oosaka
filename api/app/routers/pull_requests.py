@@ -55,7 +55,10 @@ class RelatedLearningItemOut(LearningItemOut):
     repository: RepositoryRefOut
     pull_request: PullRequestRefOut
     matched_terms: list[str]
+    match_types: list[str]
     same_repository: bool
+    relevance_score: int
+    recommendation_reasons: list[str]
 
 
 class PullRequestDetail(BaseModel):
@@ -98,7 +101,10 @@ async def get_pull_request(
                 "repository": RepositoryRefOut.model_validate(match.item.pull_request.repository).model_dump(),
                 "pull_request": PullRequestRefOut.model_validate(match.item.pull_request).model_dump(),
                 "matched_terms": match.matched_terms,
+                "match_types": match.match_types,
                 "same_repository": match.same_repository,
+                "relevance_score": match.score,
+                "recommendation_reasons": match.recommendation_reasons,
             }
             for match in related_items
         ],

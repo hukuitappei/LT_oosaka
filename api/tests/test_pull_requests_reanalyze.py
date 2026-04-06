@@ -95,7 +95,14 @@ async def test_get_pull_request_includes_related_learning_items(monkeypatch):
             repository=SimpleNamespace(id=9, full_name="owner/repo", name="repo"),
         ),
     )
-    match = SimpleNamespace(item=related_item, matched_terms=["validation"], same_repository=True)
+    match = SimpleNamespace(
+        item=related_item,
+        matched_terms=["validation"],
+        match_types=["content_match", "review_match"],
+        same_repository=True,
+        score=8,
+        recommendation_reasons=["Same repository context", "Previously marked as applied"],
+    )
 
     monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(routes, "get_workspace_pull_request", AsyncMock(return_value=pr))
@@ -110,4 +117,10 @@ async def test_get_pull_request_includes_related_learning_items(monkeypatch):
 
     assert response["id"] == 42
     assert response["related_learning_items"][0]["matched_terms"] == ["validation"]
+    assert response["related_learning_items"][0]["match_types"] == ["content_match", "review_match"]
     assert response["related_learning_items"][0]["same_repository"] is True
+    assert response["related_learning_items"][0]["relevance_score"] == 8
+    assert response["related_learning_items"][0]["recommendation_reasons"] == [
+        "Same repository context",
+        "Previously marked as applied",
+    ]
