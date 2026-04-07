@@ -8,7 +8,17 @@ API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from app.db.models import User, Workspace, WorkspaceMember
+from app.db.models import (
+    GitHubConnection,
+    LearningItem,
+    PullRequest,
+    Repository,
+    ReviewComment,
+    User,
+    WeeklyDigest,
+    Workspace,
+    WorkspaceMember,
+)
 
 
 @pytest.mark.asyncio
@@ -164,3 +174,139 @@ async def test_update_workspace_member_role_in_workspace_updates_member_when_adm
     )
     assert membership is not None
     assert membership.role == "owner"
+
+
+@pytest.mark.asyncio
+async def test_purge_workspace_deletes_workspace_scoped_data(db_session):
+    from app.services.workspaces import purge_workspace
+
+    owner = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([owner, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=owner.id, role="owner"))
+    await db_session.flush()
+
+    repo = Repository(workspace_id=workspace.id, github_id=1, full_name="acme/repo", name="repo")
+    db_session.add(repo)
+    await db_session.flush()
+
+    pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=42,
+        title="Improve flow",
+        body="body",
+        state="merged",
+        author="alice",
+        github_url="https://github.com/acme/repo/pull/42",
+    )
+    db_session.add(pr)
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ReviewComment(
+                pull_request_id=pr.id,
+                github_comment_id=1001,
+                author="reviewer",
+                body="Looks fine",
+                file_path="app.py",
+                line_number=12,
+                diff_hunk="@@ -1 +1 @@",
+            ),
+            LearningItem(
+                workspace_id=workspace.id,
+                pull_request_id=pr.id,
+                created_by_user_id=owner.id,
+                visibility="workspace_shared",
+                schema_version="1.0",
+                title="Check validation",
+                detail="Validate input before saving.",
+                category="quality",
+                confidence=0.8,
+                action_for_next_time="Add request validation.",
+                evidence="Review asked for validation.",
+            ),
+            WeeklyDigest(
+                workspace_id=workspace.id,
+                visibility="workspace_shared",
+                year=2026,
+                week=13,
+                summary="summary",
+                repeated_issues=[],
+                next_time_notes=[],
+                pr_count=1,
+                learning_count=1,
+            ),
+            GitHubConnection(
+                provider_type="token",
+                workspace_id=workspace.id,
+                user_id=owner.id,
+                access_token="secret",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await purge_workspace(
+        db_session,
+        workspace_id=workspace.id,
+        actor_user_id=owner.id,
+        confirm_slug="alpha",
+    )
+
+    assert result.workspace_id == workspace.id
+    assert result.deleted_learning_items == 1
+    assert result.deleted_review_comments == 1
+    assert result.deleted_pull_requests == 1
+    assert result.deleted_repositories == 1
+    assert result.deleted_weekly_digests == 1
+    assert result.deleted_github_connections == 1
+    assert result.deleted_memberships == 1
+
+    assert await db_session.get(Workspace, workspace.id) is None
+    assert await db_session.scalar(select(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace.id)) is None
+    assert await db_session.scalar(select(Repository).where(Repository.workspace_id == workspace.id)) is None
+    assert await db_session.scalar(select(PullRequest).where(PullRequest.repository_id == repo.id)) is None
+    assert await db_session.scalar(select(ReviewComment).where(ReviewComment.pull_request_id == pr.id)) is None
+    assert await db_session.scalar(select(LearningItem).where(LearningItem.workspace_id == workspace.id)) is None
+    assert await db_session.scalar(select(WeeklyDigest).where(WeeklyDigest.workspace_id == workspace.id)) is None
+    assert await db_session.scalar(select(GitHubConnection).where(GitHubConnection.workspace_id == workspace.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_purge_workspace_requires_owner_and_confirmation(db_session):
+    from app.services.workspaces import (
+        WorkspaceDeleteConfirmationError,
+        WorkspaceDeletePermissionError,
+        purge_workspace,
+    )
+
+    owner = User(email="owner@example.com", hashed_password="hashed::pw")
+    member = User(email="member@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([owner, member, workspace])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            WorkspaceMember(workspace_id=workspace.id, user_id=owner.id, role="owner"),
+            WorkspaceMember(workspace_id=workspace.id, user_id=member.id, role="member"),
+        ]
+    )
+    await db_session.commit()
+
+    with pytest.raises(WorkspaceDeleteConfirmationError):
+        await purge_workspace(
+            db_session,
+            workspace_id=workspace.id,
+            actor_user_id=owner.id,
+            confirm_slug="wrong",
+        )
+
+    with pytest.raises(WorkspaceDeletePermissionError):
+        await purge_workspace(
+            db_session,
+            workspace_id=workspace.id,
+            actor_user_id=member.id,
+            confirm_slug="alpha",
+        )

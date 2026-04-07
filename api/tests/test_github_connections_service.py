@@ -8,6 +8,7 @@ API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from app.services.connection_secrets import decrypt_github_connection_token, encrypt_github_connection_token
 from app.db.models import GitHubConnection, User, Workspace, WorkspaceMember
 
 
@@ -178,7 +179,40 @@ async def test_create_token_github_connection_for_workspace_context_resolves_wor
 
     assert connection.workspace_id == workspace.id
     assert connection.user_id == user.id
-    assert connection.access_token == "secret-token"
+    assert connection.access_token != "secret-token"
+    assert decrypt_github_connection_token(connection.access_token) == "secret-token"
+
+    stored = await db_session.scalar(select(GitHubConnection).where(GitHubConnection.id == connection.id))
+    assert stored is not None
+    assert stored.access_token == connection.access_token
+
+
+@pytest.mark.asyncio
+async def test_get_visible_github_connection_access_token_decrypts_stored_token(db_session):
+    from app.services.github_connections import get_visible_github_connection_access_token
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    connection = GitHubConnection(
+        provider_type="token",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        access_token=encrypt_github_connection_token("encrypted-token"),
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    access_token = await get_visible_github_connection_access_token(
+        db_session,
+        connection_id=connection.id,
+        workspace_id=workspace.id,
+        user_id=user.id,
+    )
+
+    assert access_token == "encrypted-token"
 
 
 @pytest.mark.asyncio

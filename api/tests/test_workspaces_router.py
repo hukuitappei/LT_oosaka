@@ -148,3 +148,54 @@ async def test_update_workspace_member_maps_permission_error(monkeypatch):
         await routes.update_workspace_member(3, 9, request, current_user=current_user, db=db)
 
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_purge_workspace_maps_service_errors(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+
+    monkeypatch.setattr(
+        routes,
+        "purge_workspace",
+        AsyncMock(side_effect=routes.WorkspaceDeleteConfirmationError),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await routes.purge_workspace_endpoint(3, confirm_slug="alpha", current_user=current_user, db=db)
+
+    assert exc.value.status_code == 400
+    routes.purge_workspace.assert_awaited_once_with(
+        db,
+        workspace_id=3,
+        actor_user_id=7,
+        confirm_slug="alpha",
+    )
+
+
+@pytest.mark.asyncio
+async def test_purge_workspace_returns_counts(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    result = SimpleNamespace(
+        workspace_id=3,
+        deleted_learning_items=1,
+        deleted_review_comments=2,
+        deleted_pull_requests=3,
+        deleted_repositories=4,
+        deleted_weekly_digests=5,
+        deleted_github_connections=6,
+        deleted_memberships=7,
+    )
+
+    monkeypatch.setattr(routes, "purge_workspace", AsyncMock(return_value=result))
+
+    response = await routes.purge_workspace_endpoint(3, confirm_slug="alpha", current_user=current_user, db=db)
+
+    assert response.status == "deleted"
+    assert response.deleted_learning_items == 1
+    assert response.deleted_memberships == 7

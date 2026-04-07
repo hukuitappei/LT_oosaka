@@ -67,6 +67,7 @@ importlib_metadata.version = _version_with_email_validator
 
 from app.db.session import Base  # noqa: E402
 from app.db import models as _models  # noqa: F401,E402
+from app.config import settings  # noqa: E402
 from app.llm.base import BaseLLMProvider  # noqa: E402
 from app.schemas.llm_output import LLMOutputV1, LearningItem as LLMLearningItem  # noqa: E402
 
@@ -88,6 +89,16 @@ async def db_session():
         yield session
 
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def github_connection_token_encryption_key(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "github_connection_token_encryption_key",
+        "test-github-connection-token-encryption-key",
+        raising=False,
+    )
 
 
 @pytest.fixture

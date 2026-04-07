@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import GitHubConnection, Workspace, WorkspaceMember
+from app.services.connection_secrets import decrypt_github_connection_token, encrypt_github_connection_token
 
 
 class GitHubConnectionNotFoundError(Exception):
@@ -55,6 +56,22 @@ async def list_visible_github_connections(
         )
     )
     return result.scalars().all()
+
+
+async def get_visible_github_connection_access_token(
+    db: AsyncSession,
+    *,
+    connection_id: int,
+    workspace_id: int,
+    user_id: int,
+) -> str | None:
+    connection = await get_visible_github_connection(
+        db,
+        connection_id=connection_id,
+        workspace_id=workspace_id,
+        user_id=user_id,
+    )
+    return decrypt_github_connection_token(connection.access_token)
 
 
 async def resolve_github_connection_workspace(
@@ -122,7 +139,7 @@ async def create_token_github_connection(
         provider_type="token",
         workspace_id=workspace_id,
         user_id=user_id,
-        access_token=access_token,
+        access_token=encrypt_github_connection_token(access_token),
         github_account_login=github_account_login,
         label=label,
     )

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User, Workspace, WorkspaceMember
+from app.db.models import GitHubConnection, LearningItem, PullRequest, Repository, ReviewComment, User, WeeklyDigest, Workspace, WorkspaceMember
 
 
 class WorkspaceNotFoundError(Exception):
@@ -26,6 +27,26 @@ class WorkspaceMemberNotFoundError(Exception):
 
 class WorkspacePermissionError(Exception):
     pass
+
+
+class WorkspaceDeleteConfirmationError(Exception):
+    pass
+
+
+class WorkspaceDeletePermissionError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class WorkspacePurgeResult:
+    workspace_id: int
+    deleted_learning_items: int
+    deleted_review_comments: int
+    deleted_pull_requests: int
+    deleted_repositories: int
+    deleted_weekly_digests: int
+    deleted_github_connections: int
+    deleted_memberships: int
 
 
 def _slugify(value: str) -> str:
@@ -245,3 +266,65 @@ async def update_workspace_member_role_in_workspace(
         user_id=actor_user_id,
     )
     await update_workspace_member_role(db, workspace_id, target_user_id, role)
+
+
+async def purge_workspace(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    actor_user_id: int,
+    confirm_slug: str,
+) -> WorkspacePurgeResult:
+    workspace = await get_workspace_by_id(db, workspace_id)
+    if workspace.slug != confirm_slug:
+        raise WorkspaceDeleteConfirmationError
+
+    member = await db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == actor_user_id,
+        )
+    )
+    if member is None:
+        raise WorkspaceNotFoundError
+    if member.role != "owner":
+        raise WorkspaceDeletePermissionError
+
+    pr_ids = select(PullRequest.id).join(Repository, PullRequest.repository_id == Repository.id).where(
+        Repository.workspace_id == workspace_id
+    )
+    repository_ids = select(Repository.id).where(Repository.workspace_id == workspace_id)
+
+    deleted_learning_items = (
+        await db.execute(delete(LearningItem).where(LearningItem.workspace_id == workspace_id))
+    ).rowcount or 0
+    deleted_review_comments = (
+        await db.execute(delete(ReviewComment).where(ReviewComment.pull_request_id.in_(pr_ids)))
+    ).rowcount or 0
+    deleted_pull_requests = (
+        await db.execute(delete(PullRequest).where(PullRequest.id.in_(pr_ids)))
+    ).rowcount or 0
+    deleted_repositories = (
+        await db.execute(delete(Repository).where(Repository.id.in_(repository_ids)))
+    ).rowcount or 0
+    deleted_weekly_digests = (
+        await db.execute(delete(WeeklyDigest).where(WeeklyDigest.workspace_id == workspace_id))
+    ).rowcount or 0
+    deleted_github_connections = (
+        await db.execute(delete(GitHubConnection).where(GitHubConnection.workspace_id == workspace_id))
+    ).rowcount or 0
+    deleted_memberships = (
+        await db.execute(delete(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace_id))
+    ).rowcount or 0
+    await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+    await db.commit()
+    return WorkspacePurgeResult(
+        workspace_id=workspace_id,
+        deleted_learning_items=deleted_learning_items,
+        deleted_review_comments=deleted_review_comments,
+        deleted_pull_requests=deleted_pull_requests,
+        deleted_repositories=deleted_repositories,
+        deleted_weekly_digests=deleted_weekly_digests,
+        deleted_github_connections=deleted_github_connections,
+        deleted_memberships=deleted_memberships,
+    )

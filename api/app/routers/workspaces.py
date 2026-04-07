@@ -12,6 +12,8 @@ from app.dependencies import get_current_user, get_current_workspace, require_wo
 from app.services.workspaces import (
     WorkspaceMemberAlreadyExistsError,
     WorkspaceMemberNotFoundError,
+    WorkspaceDeleteConfirmationError,
+    WorkspaceDeletePermissionError,
     WorkspaceNotFoundError,
     WorkspacePermissionError,
     WorkspaceUserNotFoundError,
@@ -19,6 +21,7 @@ from app.services.workspaces import (
     create_workspace,
     get_user_workspace,
     list_user_workspaces,
+    purge_workspace,
     update_workspace_member_role_in_workspace,
 )
 
@@ -45,6 +48,18 @@ class AddMemberRequest(BaseModel):
 
 class UpdateMemberRequest(BaseModel):
     role: str
+
+
+class PurgeWorkspaceResponse(BaseModel):
+    status: str
+    workspace_id: int
+    deleted_learning_items: int
+    deleted_review_comments: int
+    deleted_pull_requests: int
+    deleted_repositories: int
+    deleted_weekly_digests: int
+    deleted_github_connections: int
+    deleted_memberships: int
 
 
 @router.get("/", response_model=list[WorkspaceOut])
@@ -176,3 +191,27 @@ async def get_current_workspace_context(
         role=member.role,
         created_at=workspace.created_at,
     )
+
+
+@router.delete("/{workspace_id}/purge", response_model=PurgeWorkspaceResponse)
+async def purge_workspace_endpoint(
+    workspace_id: int,
+    confirm_slug: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await purge_workspace(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            confirm_slug=confirm_slug,
+        )
+    except WorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except WorkspaceDeleteConfirmationError:
+        raise HTTPException(status_code=400, detail="Workspace confirmation did not match")
+    except WorkspaceDeletePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
+
+    return PurgeWorkspaceResponse(status="deleted", **result.__dict__)
