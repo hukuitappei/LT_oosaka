@@ -128,6 +128,74 @@ Current status: the fixture-backed analysis path is retained as a development/te
 2. Expand related learning suggestions beyond simple token overlap into stronger ranking and recurrence detection.
 3. Expand browser E2E beyond the initial smoke path without making the suite brittle.
 
+## Priority Execution Plan
+
+### Priority 1: Improve Related Learning Recommendation Quality
+
+Current state:
+- Related learning suggestions already exist on the PR detail page.
+- Ranking has moved beyond simple token overlap, but it still needs to become a stable and trusted recommendation surface.
+- The product is strongest when it returns the right prior learning at the exact review moment where it can prevent repetition.
+
+Change:
+- Continue improving ranking with richer signals such as repository fit, category alignment, status, confidence, recency, review comment context, and file path context.
+- Keep returning recommendation explanations and relevance metadata from the API so the UI can explain the ordering.
+- Maintain service-level ranking tests and UI/E2E coverage for recommendation metadata and match types.
+
+Expected result:
+- Suggestions become easier to trust because the product can explain why they were surfaced.
+- Ranking moves closer to "what is most useful to avoid repeating now" instead of "what shares words."
+- This strengthens the product's differentiation around carrying review knowledge forward.
+
+Implementation scope:
+- backend ranking improvements in `api/app/services/pull_requests.py`
+- related recommendation response fields in `api/app/routers/pull_requests.py`
+- PR detail rendering in `web/src/app/pull-requests/[id]/page.tsx`
+- frontend type alignment in `web/src/lib/api.ts`
+- targeted regression and ranking tests in `api/tests/`
+
+Review and test standard:
+- ranking behavior must be covered by explicit test cases
+- response changes must preserve existing fields and add explanation metadata safely
+- UI must render recommendation reasons and match types without breaking the existing PR detail flow
+- backend tests and frontend build must pass before closing the task
+
+### Priority 2: Split Recommendation Work into Multi-Step AI/Service Roles
+
+Current state:
+- Extraction and recommendation are implemented, but recommendation quality improvements currently require changing one service in one place.
+- The system is operational, yet there is limited separation between extraction, consolidation, and recommendation responsibilities.
+
+Change:
+- Separate recommendation work into stages such as extraction, deduplication, recurrence detection, and ranking.
+- Keep each stage observable and testable on its own, even if some stages remain heuristic before using more AI.
+
+Expected result:
+- Quality issues become easier to isolate and improve.
+- Future AI-assisted recommendation work can be introduced incrementally without destabilizing the existing extraction flow.
+- This raises the project's swarm-orchestration maturity in practical terms.
+
+### Priority 3: Measure Reuse and Impact in Real Workflows
+
+Current state:
+- Learning items can be created, searched, reviewed, and status-tracked.
+- The system supports activation, but it does not yet prove whether a learning item reduced repeat review feedback.
+
+Change:
+- Track where learning items are reused and whether similar review comments decrease after adoption.
+- Surface adoption and recurrence metrics in digest/reporting flows.
+
+Expected result:
+- The product can show not only that users interacted with learning items, but that those learnings affected engineering outcomes.
+- This improves practical adoption and gives teams a clearer reason to keep the workflow in place.
+
+## Execution Order
+
+1. Finish Priority 1 end-to-end with implementation, review, and test evidence.
+2. Validate recommendation quality against real PR data.
+3. Move to Priority 2 once the recommendation surface is stable.
+4. Add Priority 3 after reuse signals are available in production flows.
+
 ### Medium Priority
 
 1. Decide whether Docker Compose or local scripts are the primary development path.
