@@ -9,3 +9,5 @@ web/test-results/
 .pytest_cache/
 pytest-cache-files-*/
 .codex_sync_backup_*/
+.claude/
+zentou-ai-checker.skill
