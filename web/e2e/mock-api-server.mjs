@@ -79,6 +79,8 @@ const weeklyDigests = [
     next_time_notes: ["Keep boundary validation early."],
     pr_count: 1,
     learning_count: 1,
+    reuse_event_count: 2,
+    reused_learning_item_count: 1,
     visibility: "workspace_shared",
     created_at: "2026-03-27T00:00:00Z",
   },
@@ -120,6 +122,7 @@ const pullRequestDetails = {
           github_url: "https://github.com/acme/review-hub/pull/30",
         },
         matched_terms: ["persistence", "validation"],
+        match_types: ["content_match", "review_match"],
         same_repository: true,
         relevance_score: 11,
         recommendation_reasons: [
@@ -127,6 +130,8 @@ const pullRequestDetails = {
           "Matches the current learning category",
           "Previously marked as applied",
         ],
+        reuse_count: 3,
+        reused_in_current_pr: false,
       },
     ],
   },
@@ -176,10 +181,18 @@ function summarizeLearningItems() {
   return {
     total_learning_items: learningItems.length,
     current_week_count: learningItems.length,
+    total_reuse_events: 2,
+    reused_learning_items_count: 1,
+    current_week_reuse_count: 2,
     weekly_points: [
       { year: 2026, week: 11, label: "2026-W11", learning_count: 0 },
       { year: 2026, week: 12, label: "2026-W12", learning_count: 0 },
       { year: 2026, week: 13, label: "2026-W13", learning_count: learningItems.length },
+    ],
+    reuse_weekly_points: [
+      { year: 2026, week: 11, label: "2026-W11", reuse_count: 0 },
+      { year: 2026, week: 12, label: "2026-W12", reuse_count: 0 },
+      { year: 2026, week: 13, label: "2026-W13", reuse_count: 2 },
     ],
     top_categories: [{ category: "design", count: learningItems.length }],
     status_counts: statusCounts,
@@ -259,6 +272,20 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && url.pathname === "/pull-requests/42") {
     return sendJson(res, 200, pullRequestDetails[42])
+  }
+
+  if (req.method === "POST" && url.pathname === "/pull-requests/42/related-learning/2/reuse") {
+    pullRequestDetails[42].related_learning_items[0] = {
+      ...pullRequestDetails[42].related_learning_items[0],
+      reuse_count: pullRequestDetails[42].related_learning_items[0].reuse_count + 1,
+      reused_in_current_pr: true,
+    }
+    return sendJson(res, 200, {
+      source_learning_item_id: 2,
+      target_pull_request_id: 42,
+      reuse_count: pullRequestDetails[42].related_learning_items[0].reuse_count,
+      already_recorded: false,
+    })
   }
 
   return sendJson(res, 404, { detail: "Not found" })

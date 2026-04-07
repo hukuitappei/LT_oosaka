@@ -102,6 +102,8 @@ async def test_get_pull_request_includes_related_learning_items(monkeypatch):
         same_repository=True,
         score=8,
         recommendation_reasons=["Same repository context", "Previously marked as applied"],
+        reuse_count=2,
+        reused_in_current_pr=True,
     )
 
     monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
@@ -124,3 +126,41 @@ async def test_get_pull_request_includes_related_learning_items(monkeypatch):
         "Same repository context",
         "Previously marked as applied",
     ]
+    assert response["related_learning_items"][0]["reuse_count"] == 2
+    assert response["related_learning_items"][0]["reused_in_current_pr"] is True
+
+
+@pytest.mark.asyncio
+async def test_record_related_learning_reuse_returns_created_payload(monkeypatch):
+    from app.routers import pull_requests as routes
+
+    current_user = SimpleNamespace(id=7)
+    current_workspace = SimpleNamespace(id=3)
+    db = SimpleNamespace()
+
+    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
+    monkeypatch.setattr(
+        routes,
+        "record_learning_reuse_for_pull_request",
+        AsyncMock(
+            return_value={
+                "source_learning_item_id": 11,
+                "target_pull_request_id": 42,
+                "reuse_count": 3,
+                "already_recorded": False,
+            }
+        ),
+    )
+
+    response = await routes.record_related_learning_reuse(
+        42,
+        11,
+        db=db,
+        current_user=current_user,
+        current_workspace=current_workspace,
+    )
+
+    assert response["source_learning_item_id"] == 11
+    assert response["target_pull_request_id"] == 42
+    assert response["reuse_count"] == 3
+    assert response["already_recorded"] is False

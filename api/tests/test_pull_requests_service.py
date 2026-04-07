@@ -73,6 +73,70 @@ async def test_request_reanalysis_for_pull_request_enqueues_task(monkeypatch, db
 
 
 @pytest.mark.asyncio
+async def test_record_learning_reuse_for_pull_request_creates_event(db_session):
+    from app.db.models import LearningItem, PullRequest, Repository, Workspace
+    from app.services.pull_requests import record_learning_reuse_for_pull_request
+
+    workspace = Workspace(name="ws", slug="ws-reuse", is_personal=True)
+    db_session.add(workspace)
+    await db_session.flush()
+
+    repo = Repository(workspace_id=workspace.id, github_id=1, full_name="owner/repo", name="repo")
+    db_session.add(repo)
+    await db_session.flush()
+
+    source_pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=1,
+        title="Older PR",
+        body="body",
+        state="merged",
+        author="author",
+        github_url="https://example.com/pr/1",
+    )
+    target_pr = PullRequest(
+        repository_id=repo.id,
+        github_pr_number=2,
+        title="Newer PR",
+        body="body",
+        state="merged",
+        author="author",
+        github_url="https://example.com/pr/2",
+    )
+    db_session.add_all([source_pr, target_pr])
+    await db_session.flush()
+
+    item = LearningItem(
+        workspace_id=workspace.id,
+        pull_request_id=source_pr.id,
+        schema_version="1.0",
+        title="Validate before persistence",
+        detail="detail",
+        category="design",
+        confidence=0.9,
+        action_for_next_time="act",
+        evidence="evidence",
+        status="applied",
+        visibility="workspace_shared",
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    result = await record_learning_reuse_for_pull_request(
+        db_session,
+        source_learning_item_id=item.id,
+        target_pr_id=target_pr.id,
+        workspace_id=workspace.id,
+        user_id=7,
+    )
+
+    assert result["source_learning_item_id"] == item.id
+    assert result["target_pull_request_id"] == target_pr.id
+    assert result["reuse_count"] == 1
+    assert result["already_recorded"] is False
+
+
+@pytest.mark.asyncio
 async def test_get_related_learning_items_for_pull_request_returns_ranked_matches(db_session):
     from app.db.models import LearningItem, PullRequest, Repository, Workspace
     from app.services.pull_requests import (

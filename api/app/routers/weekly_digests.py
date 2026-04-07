@@ -31,6 +31,8 @@ class WeeklyDigestResponse(BaseModel):
     next_time_notes: list[str]
     pr_count: int
     learning_count: int
+    reuse_event_count: int
+    reused_learning_item_count: int
     visibility: str
     created_at: datetime
 

@@ -40,6 +40,8 @@ export interface WeeklyDigest {
   next_time_notes: string[]
   pr_count: number
   learning_count: number
+  reuse_event_count: number
+  reused_learning_item_count: number
   visibility: string
   created_at: string
 }
@@ -47,11 +49,20 @@ export interface WeeklyDigest {
 export interface LearningItemsSummary {
   total_learning_items: number
   current_week_count: number
+  total_reuse_events: number
+  reused_learning_items_count: number
+  current_week_reuse_count: number
   weekly_points: Array<{
     year: number
     week: number
     label: string
     learning_count: number
+  }>
+  reuse_weekly_points: Array<{
+    year: number
+    week: number
+    label: string
+    reuse_count: number
   }>
   top_categories: Array<{
     category: string
@@ -92,6 +103,15 @@ export interface RelatedLearningItem extends LearningItem {
   same_repository: boolean
   relevance_score: number
   recommendation_reasons: string[]
+  reuse_count: number
+  reused_in_current_pr: boolean
+}
+
+export interface LearningReuseRecord {
+  source_learning_item_id: number
+  target_pull_request_id: number
+  reuse_count: number
+  already_recorded: boolean
 }
 
 export interface PullRequestDetail {
@@ -299,6 +319,11 @@ export const api = {
     apiRequest<SpaceSettings>(`/spaces/${id}/settings`, options),
   getPullRequest: (id: number, options?: ApiRequestOptions) =>
     apiRequest<PullRequestDetail>(`/pull-requests/${id}`, options),
+  recordRelatedLearningReuse: (prId: number, itemId: number, options?: ApiRequestOptions) =>
+    apiRequest<LearningReuseRecord>(`/pull-requests/${prId}/related-learning/${itemId}/reuse`, {
+      ...options,
+      method: "POST",
+    }),
   getRepositories: (options?: ApiRequestOptions) =>
     apiRequest<Repository[]>("/repositories/", options),
 }

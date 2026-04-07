@@ -30,6 +30,8 @@ export default async function WeeklyDigestDetailPage({
       <div className="mb-6 flex gap-4 text-sm text-stone-400">
         <span>PRs {digest.pr_count}</span>
         <span>Items {digest.learning_count}</span>
+        <span>Reuses {digest.reuse_event_count}</span>
+        <span>Reused learnings {digest.reused_learning_item_count}</span>
       </div>
 
       <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">

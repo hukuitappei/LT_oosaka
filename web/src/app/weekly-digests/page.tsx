@@ -29,9 +29,13 @@ export default async function WeeklyDigestsPage() {
                   <div className="flex gap-3 text-xs text-stone-400">
                     <span>PRs {digest.pr_count}</span>
                     <span>Items {digest.learning_count}</span>
+                    <span>Reuses {digest.reuse_event_count}</span>
                   </div>
                 </div>
                 <p className="line-clamp-2 text-sm leading-6 text-stone-300">{digest.summary}</p>
+                <p className="mt-3 text-xs text-stone-500">
+                  Reused learning items {digest.reused_learning_item_count}
+                </p>
               </div>
             </Link>
           ))}

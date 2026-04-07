@@ -5,10 +5,10 @@ import json
 import logging
 from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import LearningItem, WeeklyDigest
+from app.db.models import LearningItem, LearningReuseEvent, WeeklyDigest
 from app.llm.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,38 @@ async def fetch_learning_items_for_week(
     return list(result.scalars().all())
 
 
-def _build_digest_prompt(items: list[LearningItem], year: int, week: int) -> str:
+async def fetch_learning_reuse_metrics_for_week(
+    year: int,
+    week: int,
+    workspace_id: int,
+    db: AsyncSession,
+) -> tuple[int, int]:
+    week_start, week_end = _get_week_range(year, week)
+    reuse_event_count = await db.scalar(
+        select(func.count(LearningReuseEvent.id)).where(
+            LearningReuseEvent.workspace_id == workspace_id,
+            LearningReuseEvent.created_at >= week_start,
+            LearningReuseEvent.created_at <= week_end,
+        )
+    )
+    reused_learning_item_count = await db.scalar(
+        select(func.count(distinct(LearningReuseEvent.source_learning_item_id))).where(
+            LearningReuseEvent.workspace_id == workspace_id,
+            LearningReuseEvent.created_at >= week_start,
+            LearningReuseEvent.created_at <= week_end,
+        )
+    )
+    return reuse_event_count or 0, reused_learning_item_count or 0
+
+
+def _build_digest_prompt(
+    items: list[LearningItem],
+    year: int,
+    week: int,
+    *,
+    reuse_event_count: int,
+    reused_learning_item_count: int,
+) -> str:
     lines = [f"## {year} Week {week} learning items ({len(items)} items)", ""]
     by_category: dict[str, list[LearningItem]] = {}
     for item in items:
@@ -64,6 +95,10 @@ def _build_digest_prompt(items: list[LearningItem], year: int, week: int) -> str
             lines.append(f"  Next action: {item.action_for_next_time}")
         lines.append("")
 
+    lines.append("## Reuse signals")
+    lines.append(f"- Reuse events recorded this week: {reuse_event_count}")
+    lines.append(f"- Unique learning items reused this week: {reused_learning_item_count}")
+    lines.append("")
     lines.append("Summarize the weekly reflection based on the learning items above.")
     return "\n".join(lines)
 
@@ -76,12 +111,17 @@ async def generate_weekly_digest(
     db: AsyncSession,
 ) -> WeeklyDigest:
     items = await fetch_learning_items_for_week(year, week, workspace_id, db)
+    reuse_event_count, reused_learning_item_count = await fetch_learning_reuse_metrics_for_week(
+        year, week, workspace_id, db
+    )
     logger.info(
-        "generate_weekly_digest started workspace_id=%d year=%d week=%d item_count=%d",
+        "generate_weekly_digest started workspace_id=%d year=%d week=%d item_count=%d reuse_event_count=%d reused_learning_item_count=%d",
         workspace_id,
         year,
         week,
         len(items),
+        reuse_event_count,
+        reused_learning_item_count,
     )
 
     if not items:
@@ -97,7 +137,13 @@ async def generate_weekly_digest(
             len(items),
         )
         raw_result = await _call_llm_for_digest(
-            _build_digest_prompt(items, year, week),
+            _build_digest_prompt(
+                items,
+                year,
+                week,
+                reuse_event_count=reuse_event_count,
+                reused_learning_item_count=reused_learning_item_count,
+            ),
             provider,
             workspace_id=workspace_id,
             year=year,

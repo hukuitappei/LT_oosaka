@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import logging
-import re
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import replace
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import LearningItem, PullRequest, Repository
+from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository
+from app.services.related_learning_recommendations import (
+    RelatedLearningItemMatch,
+    recommend_related_learning_items,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,274 +20,8 @@ class PullRequestNotFoundError(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class RelatedLearningItemMatch:
-    item: LearningItem
-    matched_terms: list[str]
-    match_types: list[str]
-    same_repository: bool
-    score: int
-    recommendation_reasons: list[str]
-
-
-TOKEN_RE = re.compile(r"[a-z0-9_]{4,}")
-STOP_WORDS = {
-    "author",
-    "this",
-    "that",
-    "with",
-    "from",
-    "into",
-    "before",
-    "after",
-    "should",
-    "would",
-    "could",
-    "there",
-    "their",
-    "about",
-    "owner",
-    "repo",
-    "review",
-    "request",
-    "pull",
-    "github",
-    "have",
-    "were",
-    "when",
-    "where",
-    "validation",
-}
-
-
-def _tokenize(*values: str | None) -> set[str]:
-    tokens: set[str] = set()
-    for value in values:
-        if not value:
-            continue
-        for token in TOKEN_RE.findall(value.lower()):
-            if token not in STOP_WORDS:
-                tokens.add(token)
-    return tokens
-
-
-def _build_pr_context_tokens(pr: PullRequest) -> set[str]:
-    return _pull_request_content_tokens(pr) | _pull_request_review_tokens(pr) | _pull_request_file_path_tokens(pr)
-
-
-def _pull_request_content_tokens(pr: PullRequest | None) -> set[str]:
-    if pr is None:
-        return set()
-
-    learning_tokens: set[str] = set()
-    for item in pr.learning_items:
-        learning_tokens |= _tokenize(
-            item.title,
-            item.detail,
-            item.evidence,
-            item.action_for_next_time,
-            item.category,
-        )
-
-    return _tokenize(
-        pr.title,
-        pr.body,
-        pr.author,
-        pr.repository.full_name if pr.repository else None,
-    ) | learning_tokens
-
-
-def _pull_request_review_tokens(pr: PullRequest | None) -> set[str]:
-    if pr is None:
-        return set()
-
-    review_tokens: set[str] = set()
-    for comment in pr.review_comments:
-        review_tokens |= _tokenize(
-            comment.body,
-            comment.diff_hunk,
-        )
-    return review_tokens
-
-
-def _pull_request_file_path_tokens(pr: PullRequest | None) -> set[str]:
-    if pr is None:
-        return set()
-
-    file_path_tokens: set[str] = set()
-    for comment in pr.review_comments:
-        file_path_tokens |= _tokenize(comment.file_path)
-    return file_path_tokens
-
-
-def _current_learning_categories(pr: PullRequest) -> set[str]:
-    return {
-        item.category
-        for item in pr.learning_items
-        if item.category
-    }
-
-
-def _status_score(status: str) -> int:
-    if status == "applied":
-        return 2
-    if status == "in_progress":
-        return 1
-    if status == "ignored":
-        return -2
-    return 0
-
-
-def _confidence_score(confidence: float) -> int:
-    if confidence >= 0.95:
-        return 2
-    if confidence >= 0.8:
-        return 1
-    return 0
-
-
-def _recency_score(created_at: datetime | None) -> int:
-    if created_at is None:
-        return 0
-    now = datetime.now(timezone.utc)
-    created = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-    age_days = (now - created).days
-    if age_days <= 30:
-        return 2
-    if age_days <= 90:
-        return 1
-    return 0
-
-
-def _build_recommendation_reasons(
-    matched_terms: list[str],
-    same_repository: bool,
-    category_aligned: bool,
-    review_context_aligned: bool,
-    status: str,
-    created_at: datetime | None,
-) -> list[str]:
-    reasons: list[str] = []
-    if same_repository:
-        reasons.append("Same repository context")
-    if category_aligned:
-        reasons.append("Matches the current learning category")
-    if review_context_aligned:
-        reasons.append("Aligned with review comment context")
-    if len(matched_terms) >= 3:
-        reasons.append(f"Strong overlap on {len(matched_terms)} context terms")
-    elif matched_terms:
-        reasons.append(f"Overlap on {len(matched_terms)} context terms")
-    if status == "applied":
-        reasons.append("Previously marked as applied")
-    elif status == "in_progress":
-        reasons.append("Already being worked on")
-    recency = _recency_score(created_at)
-    if recency >= 2:
-        reasons.append("Recent learning from the last 30 days")
-    elif recency == 1:
-        reasons.append("Recent learning from the last 90 days")
-    return reasons
-
-
-def _ranked_terms(*term_groups: set[str]) -> list[str]:
-    combined = set().union(*term_groups)
-    return sorted(combined, key=lambda term: (-len(term), term))
-
-
-def _score_related_learning_items(
-    pr: PullRequest,
-    candidates: list[LearningItem],
-) -> list[RelatedLearningItemMatch]:
-    context_tokens = _build_pr_context_tokens(pr)
-    if not context_tokens:
-        return []
-    current_categories = _current_learning_categories(pr)
-    current_content_tokens = _pull_request_content_tokens(pr)
-    current_review_tokens = _pull_request_review_tokens(pr)
-    current_file_path_tokens = _pull_request_file_path_tokens(pr)
-
-    matches: list[RelatedLearningItemMatch] = []
-    for item in candidates:
-        candidate_review_tokens = _pull_request_review_tokens(item.pull_request)
-        candidate_content_tokens = _pull_request_content_tokens(item.pull_request) | _tokenize(
-            item.title,
-            item.detail,
-            item.evidence,
-            item.action_for_next_time,
-            item.category,
-        )
-        candidate_file_path_tokens = _pull_request_file_path_tokens(item.pull_request)
-        candidate_tokens = candidate_content_tokens | candidate_review_tokens | candidate_file_path_tokens
-        content_overlap = current_content_tokens & candidate_content_tokens
-        review_overlap = current_review_tokens & candidate_review_tokens
-        file_path_overlap = current_file_path_tokens & candidate_file_path_tokens
-        matched_terms = _ranked_terms(review_overlap, file_path_overlap, content_overlap)
-        if not matched_terms:
-            continue
-
-        match_types: list[str] = []
-        if content_overlap:
-            match_types.append("content_match")
-        if review_overlap:
-            match_types.append("review_match")
-        if file_path_overlap:
-            match_types.append("file_path_match")
-
-        same_repository = (
-            pr.repository is not None
-            and item.pull_request is not None
-            and item.pull_request.repository is not None
-            and item.pull_request.repository.id == pr.repository.id
-        )
-        category_aligned = item.category in current_categories
-        review_context_aligned = bool(review_overlap or file_path_overlap)
-        if not same_repository and len(matched_terms) < 2:
-            continue
-        if (
-            not same_repository
-            and not category_aligned
-            and not review_context_aligned
-            and len(content_overlap) < 4
-        ):
-            continue
-        score = (
-            len(matched_terms)
-            + (3 if same_repository else 0)
-            + (2 if category_aligned else 0)
-            + (2 if review_context_aligned else 0)
-            + _status_score(item.status)
-            + _confidence_score(item.confidence)
-            + _recency_score(item.created_at)
-        )
-        recommendation_reasons = _build_recommendation_reasons(
-            matched_terms=matched_terms,
-            same_repository=same_repository,
-            category_aligned=category_aligned,
-            review_context_aligned=review_context_aligned,
-            status=item.status,
-            created_at=item.created_at,
-        )
-        matches.append(
-            RelatedLearningItemMatch(
-                item=item,
-                matched_terms=matched_terms[:5],
-                match_types=match_types,
-                same_repository=same_repository,
-                score=score,
-                recommendation_reasons=recommendation_reasons,
-            )
-        )
-
-    matches.sort(
-        key=lambda match: (
-            -match.score,
-            match.item.status == "ignored",
-            -match.item.confidence,
-            -match.item.id,
-        )
-    )
-    return matches[:3]
+class RelatedLearningItemNotFoundError(Exception):
+    pass
 
 
 async def get_workspace_pull_request(
@@ -325,7 +61,41 @@ async def get_related_learning_items_for_pull_request(
         )
         .order_by(LearningItem.created_at.desc())
     )
-    return _score_related_learning_items(pr, list(result.scalars().all()))
+    matches = recommend_related_learning_items(pr, list(result.scalars().all()))
+    if not matches:
+        return []
+
+    item_ids = [match.item.id for match in matches]
+    reuse_counts_result = await db.execute(
+        select(
+            LearningReuseEvent.source_learning_item_id,
+            func.count(LearningReuseEvent.id),
+        )
+        .where(
+            LearningReuseEvent.workspace_id == workspace_id,
+            LearningReuseEvent.source_learning_item_id.in_(item_ids),
+        )
+        .group_by(LearningReuseEvent.source_learning_item_id)
+    )
+    reuse_counts = {item_id: count for item_id, count in reuse_counts_result.all()}
+
+    current_pr_result = await db.execute(
+        select(LearningReuseEvent.source_learning_item_id).where(
+            LearningReuseEvent.workspace_id == workspace_id,
+            LearningReuseEvent.target_pull_request_id == pr.id,
+            LearningReuseEvent.source_learning_item_id.in_(item_ids),
+        )
+    )
+    reused_in_current_pr = set(current_pr_result.scalars().all())
+
+    return [
+        replace(
+            match,
+            reuse_count=reuse_counts.get(match.item.id, 0),
+            reused_in_current_pr=match.item.id in reused_in_current_pr,
+        )
+        for match in matches
+    ]
 
 
 async def request_reanalysis_for_pull_request(
@@ -348,3 +118,74 @@ async def request_reanalysis_for_pull_request(
         user_id,
     )
     return {"status": "accepted", "pr_id": pr_id}
+
+
+async def record_learning_reuse_for_pull_request(
+    db: AsyncSession,
+    *,
+    source_learning_item_id: int,
+    target_pr_id: int,
+    workspace_id: int,
+    user_id: int,
+) -> dict[str, int | bool]:
+    target_pr = await get_workspace_pull_request(db, target_pr_id, workspace_id)
+    if not target_pr:
+        raise PullRequestNotFoundError
+
+    source_item = await db.scalar(
+        select(LearningItem).where(
+            LearningItem.id == source_learning_item_id,
+            LearningItem.workspace_id == workspace_id,
+        )
+    )
+    if not source_item:
+        raise RelatedLearningItemNotFoundError
+    if source_item.pull_request_id == target_pr_id:
+        raise RelatedLearningItemNotFoundError
+
+    existing = await db.scalar(
+        select(LearningReuseEvent).where(
+            LearningReuseEvent.workspace_id == workspace_id,
+            LearningReuseEvent.source_learning_item_id == source_learning_item_id,
+            LearningReuseEvent.target_pull_request_id == target_pr_id,
+        )
+    )
+    if existing:
+        return {
+            "source_learning_item_id": source_learning_item_id,
+            "target_pull_request_id": target_pr_id,
+            "reuse_count": await _count_learning_reuse_events(db, workspace_id, source_learning_item_id),
+            "already_recorded": True,
+        }
+
+    db.add(
+        LearningReuseEvent(
+            workspace_id=workspace_id,
+            source_learning_item_id=source_learning_item_id,
+            target_pull_request_id=target_pr_id,
+            created_by_user_id=user_id,
+        )
+    )
+    await db.commit()
+    return {
+        "source_learning_item_id": source_learning_item_id,
+        "target_pull_request_id": target_pr_id,
+        "reuse_count": await _count_learning_reuse_events(db, workspace_id, source_learning_item_id),
+        "already_recorded": False,
+    }
+
+
+async def _count_learning_reuse_events(
+    db: AsyncSession,
+    workspace_id: int,
+    source_learning_item_id: int,
+) -> int:
+    return int(
+        await db.scalar(
+            select(func.count(LearningReuseEvent.id)).where(
+                LearningReuseEvent.workspace_id == workspace_id,
+                LearningReuseEvent.source_learning_item_id == source_learning_item_id,
+            )
+        )
+        or 0
+    )

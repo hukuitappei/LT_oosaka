@@ -7,6 +7,7 @@ import {
   LEARNING_STATUS_LABELS,
 } from "@/lib/learning-item-labels"
 import type { RelatedLearningItem } from "@/lib/api"
+import { RelatedLearningReuseButton } from "@/components/RelatedLearningReuseButton"
 import { getRequestContextHeaders } from "@/lib/request-context"
 
 const MATCH_TYPE_LABELS: Record<RelatedLearningItem["match_types"][number], string> = {
@@ -125,6 +126,14 @@ export default async function PullRequestDetailPage({
                   <p className="mb-2 text-xs uppercase tracking-[0.18em] text-stone-500">
                     {item.repository.full_name} / PR #{item.pull_request.github_pr_number}
                   </p>
+                  <div className="mb-3 flex items-center gap-3">
+                    <RelatedLearningReuseButton
+                      prId={pullRequest.id}
+                      itemId={item.id}
+                      reusedInCurrentPr={item.reused_in_current_pr}
+                    />
+                    <span className="text-xs text-stone-400">Reuse count {item.reuse_count}</span>
+                  </div>
                   <p className="mb-3 text-sm leading-6 text-stone-300">{item.detail}</p>
                   <div className="mb-3 flex flex-wrap gap-2">
                     {item.match_types.map((type) => (

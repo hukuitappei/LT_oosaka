@@ -4,13 +4,14 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import LearningItem, PullRequest, Repository
+from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository
 from app.schemas.learning_items import (
     LearningItemsCategoryCount,
+    LearningItemsReusePoint,
     LearningItemsStatusCount,
     LearningItemsSummaryResponse,
     LearningItemsWeeklyPoint,
@@ -157,16 +158,17 @@ async def summarize_workspace_learning_items(
     weeks: int = 8,
     today: date | None = None,
 ) -> LearningItemsSummaryResponse:
-    result = await db.execute(
+    learning_result = await db.execute(
         select(LearningItem.category, LearningItem.status, LearningItem.created_at)
         .where(LearningItem.workspace_id == workspace_id)
         .order_by(LearningItem.created_at.desc())
     )
-    rows = result.all()
+    rows = learning_result.all()
 
     today_value = today or date.today()
     week_sequence = _week_sequence(today=today_value, weeks=weeks)
     weekly_counts = {(point.year, point.week): 0 for point in week_sequence}
+    reuse_weekly_counts = {(point.year, point.week): 0 for point in week_sequence}
     category_counts: Counter[str] = Counter()
     status_counts: Counter[str] = Counter()
 
@@ -179,16 +181,47 @@ async def summarize_workspace_learning_items(
         if key in weekly_counts:
             weekly_counts[key] += 1
 
+    reuse_result = await db.execute(
+        select(LearningReuseEvent.source_learning_item_id, LearningReuseEvent.created_at)
+        .where(LearningReuseEvent.workspace_id == workspace_id)
+        .order_by(LearningReuseEvent.created_at.desc())
+    )
+    reuse_rows = reuse_result.all()
+
+    for _, created_at in reuse_rows:
+        created_date = created_at.date()
+        year, week, _ = created_date.isocalendar()
+        key = (year, week)
+        if key in reuse_weekly_counts:
+            reuse_weekly_counts[key] += 1
+
     current_year, current_week, _ = today_value.isocalendar()
+    reused_learning_items_count = await db.scalar(
+        select(func.count(distinct(LearningReuseEvent.source_learning_item_id))).where(
+            LearningReuseEvent.workspace_id == workspace_id
+        )
+    )
     return LearningItemsSummaryResponse(
         total_learning_items=len(rows),
         current_week_count=weekly_counts.get((current_year, current_week), 0),
+        total_reuse_events=len(reuse_rows),
+        reused_learning_items_count=reused_learning_items_count or 0,
+        current_week_reuse_count=reuse_weekly_counts.get((current_year, current_week), 0),
         weekly_points=[
             LearningItemsWeeklyPoint(
                 year=point.year,
                 week=point.week,
                 label=f"{point.year}-W{point.week:02d}",
                 learning_count=weekly_counts[(point.year, point.week)],
+            )
+            for point in week_sequence
+        ],
+        reuse_weekly_points=[
+            LearningItemsReusePoint(
+                year=point.year,
+                week=point.week,
+                label=f"{point.year}-W{point.week:02d}",
+                reuse_count=reuse_weekly_counts[(point.year, point.week)],
             )
             for point in week_sequence
         ],

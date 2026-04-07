@@ -50,6 +50,13 @@ class LearningItemsWeeklyPoint(BaseModel):
     learning_count: int
 
 
+class LearningItemsReusePoint(BaseModel):
+    year: int
+    week: int
+    label: str
+    reuse_count: int
+
+
 class LearningItemsCategoryCount(BaseModel):
     category: str
     count: int
@@ -63,7 +70,11 @@ class LearningItemsStatusCount(BaseModel):
 class LearningItemsSummaryResponse(BaseModel):
     total_learning_items: int
     current_week_count: int
+    total_reuse_events: int
+    reused_learning_items_count: int
+    current_week_reuse_count: int
     weekly_points: list[LearningItemsWeeklyPoint]
+    reuse_weekly_points: list[LearningItemsReusePoint]
     top_categories: list[LearningItemsCategoryCount]
     status_counts: list[LearningItemsStatusCount]
 

@@ -11,8 +11,10 @@ from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
 from app.services.pull_requests import (
     PullRequestNotFoundError,
+    RelatedLearningItemNotFoundError,
     get_related_learning_items_for_pull_request,
     get_workspace_pull_request,
+    record_learning_reuse_for_pull_request,
     request_reanalysis_for_pull_request,
 )
 
@@ -59,6 +61,15 @@ class RelatedLearningItemOut(LearningItemOut):
     same_repository: bool
     relevance_score: int
     recommendation_reasons: list[str]
+    reuse_count: int
+    reused_in_current_pr: bool
+
+
+class LearningReuseRecordOut(BaseModel):
+    source_learning_item_id: int
+    target_pull_request_id: int
+    reuse_count: int
+    already_recorded: bool
 
 
 class PullRequestDetail(BaseModel):
@@ -105,6 +116,8 @@ async def get_pull_request(
                 "same_repository": match.same_repository,
                 "relevance_score": match.score,
                 "recommendation_reasons": match.recommendation_reasons,
+                "reuse_count": match.reuse_count,
+                "reused_in_current_pr": match.reused_in_current_pr,
             }
             for match in related_items
         ],
@@ -133,3 +146,31 @@ async def reanalyze_pull_request(
         )
     except PullRequestNotFoundError:
         raise HTTPException(status_code=404, detail="Pull request not found")
+
+
+@router.post("/{pr_id}/related-learning/{item_id}/reuse", response_model=LearningReuseRecordOut)
+async def record_related_learning_reuse(
+    pr_id: int,
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
+):
+    await require_workspace_role(
+        {"owner", "admin", "member"},
+        current_user=current_user,
+        current_workspace=current_workspace,
+        db=db,
+    )
+    try:
+        return await record_learning_reuse_for_pull_request(
+            db,
+            source_learning_item_id=item_id,
+            target_pr_id=pr_id,
+            workspace_id=current_workspace.id,
+            user_id=current_user.id,
+        )
+    except PullRequestNotFoundError:
+        raise HTTPException(status_code=404, detail="Pull request not found")
+    except RelatedLearningItemNotFoundError:
+        raise HTTPException(status_code=404, detail="Related learning item not found")

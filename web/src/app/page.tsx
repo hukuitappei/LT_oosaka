@@ -76,7 +76,7 @@ export default async function Home() {
             <StatCard label="Total Items" value={learningSummary?.total_learning_items ?? 0} />
             <StatCard label="New" value={statusCounts.new ?? 0} />
             <StatCard label="In Progress" value={statusCounts.in_progress ?? 0} />
-            <StatCard label="Digests" value={digests?.length ?? 0} />
+            <StatCard label="Reuse Events" value={learningSummary?.total_reuse_events ?? 0} />
           </div>
         </div>
       </section>
@@ -164,6 +164,10 @@ export default async function Home() {
                 </span>
               </div>
               <p className="mb-4 text-sm leading-6 text-stone-300">{latestDigest.summary}</p>
+              <div className="mb-4 flex flex-wrap gap-3 text-xs text-stone-400">
+                <span>Reuse events {latestDigest.reuse_event_count}</span>
+                <span>Reused learnings {latestDigest.reused_learning_item_count}</span>
+              </div>
               <Link
                 href={`/weekly-digests/${latestDigest.id}`}
                 className="text-sm text-amber-300 hover:text-amber-200"
@@ -216,6 +220,34 @@ export default async function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <h2 className="mb-4 text-xl font-semibold text-white">Adoption Snapshot</h2>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">Total reuse events</span>
+                  <span className="font-mono text-stone-400">{learningSummary?.total_reuse_events ?? 0}</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">Reused learning items</span>
+                  <span className="font-mono text-stone-400">
+                    {learningSummary?.reused_learning_items_count ?? 0}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">Current week reuse events</span>
+                  <span className="font-mono text-stone-400">
+                    {learningSummary?.current_week_reuse_count ?? 0}
+                  </span>
+                </div>
+              </div>
             </div>
           </section>
 

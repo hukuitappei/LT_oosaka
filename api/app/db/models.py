@@ -45,6 +45,10 @@ class User(Base):
         back_populates="created_by_user",
         foreign_keys="LearningItem.created_by_user_id",
     )
+    recorded_learning_reuses: Mapped[list["LearningReuseEvent"]] = relationship(
+        back_populates="created_by_user",
+        foreign_keys="LearningReuseEvent.created_by_user_id",
+    )
 
 
 class Workspace(Base):
@@ -64,6 +68,7 @@ class Workspace(Base):
     repositories: Mapped[list["Repository"]] = relationship(back_populates="workspace")
     weekly_digests: Mapped[list["WeeklyDigest"]] = relationship(back_populates="workspace")
     learning_items: Mapped[list["LearningItem"]] = relationship(back_populates="workspace")
+    learning_reuse_events: Mapped[list["LearningReuseEvent"]] = relationship(back_populates="workspace")
     github_connections: Mapped[list["GitHubConnection"]] = relationship(back_populates="workspace")
     settings: Mapped["SpaceSettings | None"] = relationship(
         back_populates="workspace",
@@ -151,6 +156,10 @@ class PullRequest(Base):
     repository: Mapped["Repository"] = relationship(back_populates="pull_requests")
     review_comments: Mapped[list["ReviewComment"]] = relationship(back_populates="pull_request")
     learning_items: Mapped[list["LearningItem"]] = relationship(back_populates="pull_request")
+    recorded_learning_reuses: Mapped[list["LearningReuseEvent"]] = relationship(
+        back_populates="target_pull_request",
+        foreign_keys="LearningReuseEvent.target_pull_request_id",
+    )
 
 
 class ReviewComment(Base):
@@ -193,6 +202,42 @@ class LearningItem(Base):
     pull_request: Mapped["PullRequest"] = relationship(back_populates="learning_items")
     created_by_user: Mapped["User | None"] = relationship(
         back_populates="created_learning_items",
+        foreign_keys=[created_by_user_id],
+    )
+    reuse_events: Mapped[list["LearningReuseEvent"]] = relationship(
+        back_populates="source_learning_item",
+        foreign_keys="LearningReuseEvent.source_learning_item_id",
+    )
+
+
+class LearningReuseEvent(Base):
+    __tablename__ = "learning_reuse_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_learning_item_id",
+            "target_pull_request_id",
+            name="uq_learning_reuse_source_target",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    source_learning_item_id: Mapped[int] = mapped_column(ForeignKey("learning_items.id"), index=True)
+    target_pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id"), index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="learning_reuse_events")
+    source_learning_item: Mapped["LearningItem"] = relationship(
+        back_populates="reuse_events",
+        foreign_keys=[source_learning_item_id],
+    )
+    target_pull_request: Mapped["PullRequest"] = relationship(
+        back_populates="recorded_learning_reuses",
+        foreign_keys=[target_pull_request_id],
+    )
+    created_by_user: Mapped["User | None"] = relationship(
+        back_populates="recorded_learning_reuses",
         foreign_keys=[created_by_user_id],
     )
 

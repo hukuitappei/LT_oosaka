@@ -183,7 +183,7 @@ async def test_update_workspace_learning_item_updates_status_and_visibility(db_s
 
 @pytest.mark.asyncio
 async def test_summarize_workspace_learning_items_returns_weekly_points(db_session):
-    from app.db.models import LearningItem, PullRequest, Repository, Workspace
+    from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository, Workspace
     from app.services.learning_items import summarize_workspace_learning_items
 
     workspace = Workspace(name="Alpha", slug="alpha-summary", is_personal=True)
@@ -217,9 +217,7 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
     db_session.add_all([first_pr, second_pr])
     await db_session.flush()
 
-    db_session.add_all(
-        [
-            LearningItem(
+    first_item = LearningItem(
                 workspace_id=workspace.id,
                 pull_request_id=first_pr.id,
                 schema_version="1.0",
@@ -232,8 +230,8 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
                 status="new",
                 visibility="workspace_shared",
                 created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
-            ),
-            LearningItem(
+            )
+    second_item = LearningItem(
                 workspace_id=workspace.id,
                 pull_request_id=second_pr.id,
                 schema_version="1.0",
@@ -246,6 +244,22 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
                 status="in_progress",
                 visibility="workspace_shared",
                 created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
+            )
+    db_session.add_all([first_item, second_item])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            LearningReuseEvent(
+                workspace_id=workspace.id,
+                source_learning_item_id=first_item.id,
+                target_pull_request_id=second_pr.id,
+                created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
+            ),
+            LearningReuseEvent(
+                workspace_id=workspace.id,
+                source_learning_item_id=first_item.id,
+                target_pull_request_id=first_pr.id,
+                created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
             ),
         ]
     )
@@ -260,8 +274,12 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
 
     assert summary.total_learning_items == 2
     assert summary.current_week_count == 1
+    assert summary.total_reuse_events == 2
+    assert summary.reused_learning_items_count == 1
+    assert summary.current_week_reuse_count == 1
     assert [point.label for point in summary.weekly_points] == ["2026-W11", "2026-W12", "2026-W13"]
     assert [point.learning_count for point in summary.weekly_points] == [0, 1, 1]
+    assert [point.reuse_count for point in summary.reuse_weekly_points] == [0, 1, 1]
     assert {(row.category, row.count) for row in summary.top_categories} == {("design", 1), ("testing", 1)}
     assert {(row.status, row.count) for row in summary.status_counts} == {
         ("new", 1),
