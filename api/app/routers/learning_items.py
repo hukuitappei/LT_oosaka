@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User, Workspace
+from app.db.models import User, Workspace, WorkspaceMember
 from app.db.session import get_db
-from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.dependencies import get_current_user, get_current_workspace, get_current_workspace_member
 from app.schemas.learning_items import LearningItemsSummaryResponse, LearningItemResponse
 from app.services.learning_items import (
     LearningItemNotFoundError,
@@ -24,13 +24,8 @@ async def list_learning_items(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     return await list_workspace_learning_items(
         db,
         current_workspace.id,
@@ -45,13 +40,8 @@ async def get_learning_items_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     return await summarize_workspace_learning_items(
         db,
         current_workspace.id,
@@ -65,13 +55,8 @@ async def get_learning_item(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     try:
         return await get_workspace_learning_item(db, item_id, current_workspace.id)
     except LearningItemNotFoundError:

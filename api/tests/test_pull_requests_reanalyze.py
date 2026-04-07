@@ -13,7 +13,6 @@ async def test_reanalyze_pull_request_enqueues_celery_task(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     db = SimpleNamespace()
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
         "request_reanalysis_for_pull_request",
@@ -39,7 +38,6 @@ async def test_reanalyze_pull_request_returns_404_when_pr_missing(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     db = SimpleNamespace()
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
         "request_reanalysis_for_pull_request",

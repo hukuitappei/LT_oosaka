@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User, Workspace
+from app.db.models import User, Workspace, WorkspaceMember
 from app.db.session import get_db
-from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.dependencies import get_current_user, get_current_workspace, get_current_workspace_member
 from app.services.weekly_digests import (
     WeeklyDigestNotFoundError,
     WeeklyDigestProviderUnavailableError,
@@ -47,13 +47,8 @@ async def list_weekly_digests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     return await list_workspace_weekly_digests(db, current_workspace.id)
 
 
@@ -63,13 +58,8 @@ async def get_weekly_digest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     try:
         return await get_workspace_weekly_digest(db, digest_id, current_workspace.id)
     except WeeklyDigestNotFoundError:
@@ -82,13 +72,8 @@ async def generate_digest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     period = resolve_weekly_digest_period(request.year, request.week)
 
     try:

@@ -1,16 +1,55 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
-test("authenticated users can navigate core pages and manage GitHub connections", async ({ page }) => {
+async function setAuthenticatedState(page: Page, token: string) {
+  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  await page.evaluate(
+    ({ token: currentToken }) => {
+      document.cookie = `token=${currentToken}; path=/; SameSite=Lax`
+      document.cookie = "workspace_id=1; path=/; SameSite=Lax"
+      localStorage.setItem("auth_token", currentToken)
+      localStorage.setItem("workspace_id", "1")
+      localStorage.setItem("auth_email", "e2e@example.com")
+    },
+    { token },
+  )
+}
+
+test("redirects anonymous users from protected pages", async ({ page }) => {
+  await page.goto("/weekly-digests/1", { waitUntil: "domcontentloaded" })
+  await expect(page).toHaveURL(/\/login$/)
+
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   await expect(page.getByTestId("login-submit")).toBeVisible()
+})
 
-  await page.evaluate(() => {
-    document.cookie = "token=e2e-token; path=/; SameSite=Lax"
-    document.cookie = "workspace_id=1; path=/; SameSite=Lax"
-    localStorage.setItem("auth_token", "e2e-token")
-    localStorage.setItem("workspace_id", "1")
-    localStorage.setItem("auth_email", "e2e@example.com")
-  })
+test("renders weekly digest detail for authenticated users", async ({ page }) => {
+  await setAuthenticatedState(page, "e2e-token")
+
+  await page.goto("/weekly-digests/1", { waitUntil: "domcontentloaded" })
+
+  await expect(page).toHaveURL(/\/weekly-digests\/1$/)
+  await expect(page.getByTestId("weekly-digest-detail")).toBeVisible()
+  await expect(page.getByTestId("weekly-digest-back-link")).toBeVisible()
+  await expect(page.getByTestId("weekly-digest-summary")).toContainText(
+    "Validation and API boundary handling improved.",
+  )
+  await expect(page.getByTestId("weekly-digest-repeated-issues")).toContainText(
+    "Validation checks were missing at the request boundary.",
+  )
+  await expect(page.getByTestId("weekly-digest-next-time-notes")).toContainText("Keep boundary validation early.")
+})
+
+test("shows an empty state for learning items", async ({ page }) => {
+  await setAuthenticatedState(page, "e2e-empty")
+
+  await page.goto("/learning-items", { waitUntil: "domcontentloaded" })
+
+  await expect(page).toHaveURL(/\/learning-items$/)
+  await expect(page.getByTestId("learning-items-empty-state")).toBeVisible()
+})
+
+test("authenticated users can navigate core pages and manage GitHub connections", async ({ page }) => {
+  await setAuthenticatedState(page, "e2e-token")
 
   await page.goto("/learning-items", { waitUntil: "domcontentloaded" })
   await expect(page).toHaveURL(/\/learning-items$/)

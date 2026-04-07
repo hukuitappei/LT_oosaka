@@ -16,7 +16,9 @@ export default async function WeeklyDigestsPage() {
       </div>
 
       {!digests || digests.length === 0 ? (
-        <p className="text-stone-400">まだ週次ダイジェストはありません。</p>
+        <p className="text-stone-400" data-testid="weekly-digests-empty-state">
+          まだ週次ダイジェストはありません。
+        </p>
       ) : (
         <div className="space-y-4">
           {digests.map((digest) => (

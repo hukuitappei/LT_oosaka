@@ -98,7 +98,11 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && (
+            <p className="text-sm text-red-400" data-testid="login-error">
+              {error}
+            </p>
+          )}
 
           <button
             data-testid="login-submit"

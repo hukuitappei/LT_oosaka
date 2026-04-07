@@ -18,7 +18,9 @@ export default async function LearningItemsPage() {
       </div>
 
       {!items || items.length === 0 ? (
-        <p className="text-stone-400">まだ学びはありません。</p>
+        <p className="text-stone-400" data-testid="learning-items-empty-state">
+          まだ学びはありません。
+        </p>
       ) : (
         <div className="space-y-4">
           {items.map((item) => (

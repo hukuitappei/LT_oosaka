@@ -27,7 +27,7 @@ The frontend talks to the backend through `API_URL`. In local development it def
 
 ## Core Design Principle
 
-PR Knowledge Hub is a `review knowledge extraction pipeline`.
+PR Knowledge Hub is a review knowledge extraction pipeline.
 
 The pipeline is intentionally staged:
 
@@ -49,13 +49,11 @@ This keeps the HTTP layer thin, the service layer orchestration-focused, and the
 
 Operationally, these stages are split across dedicated Celery lanes so heavy cleanup or digest work does not block webhook-driven extraction.
 
-## データ取扱い概要
+## Data Handling
 
-PR Knowledge Hub は、認証情報、workspace、GitHub 接続情報、repository、pull request、review comment、learning item、weekly digest をアプリケーションのデータベースに保存します。Celery のキューと結果管理には Redis を使い、ローカルまたはセルフホスト前提の LLM 接続先として Ollama を利用できます。
+The data retention and minimization policy lives in [docs/data-handling-policy.md](docs/data-handling-policy.md).
 
-外部送信は、GitHub から PR 情報を取得するとき、または LLM プロバイダを呼び出すときに限られます。GitHub API へのアクセスには GitHub App または token 接続を使います。Anthropic を使う場合は抽出・生成用のプロンプトが Anthropic に送信されます。Ollama を使う場合は `OLLAMA_BASE_URL` にのみ送信されます。
-
-保持期間とデータ最小化の既定方針は [docs/data-handling-policy.md](/C:/Users/s141142/Desktop/myenv/LT_oosaka/docs/data-handling-policy.md) に記載しています。この文書では、現状実装の事実、運用方針としての既定値、今後の強化項目を分けて整理しています。
+The staging verification checklist lives in [docs/staging-verification-checklist.md](docs/staging-verification-checklist.md).
 
 ## Quick Start
 
@@ -136,8 +134,9 @@ npm run build
 
 Current local verification at the time of the latest refactor:
 
-- `api`: `123 passed`
-- `web`: lint passes before build in CI
+- `api`: `137 passed`
+- `web`: lint passes
+- `web`: browser E2E passes
 - `web`: production build succeeds
 
 ## CI
@@ -146,6 +145,7 @@ GitHub Actions runs:
 
 - `api`: `pytest -q`
 - `web`: `npm ci && npm run lint && npm run build`
+- `web-e2e`: `npm ci && npx playwright install --with-deps chromium && npm run test:e2e`
 
 Workflow file:
 
@@ -165,9 +165,9 @@ Workflow file:
 
 - The fixture-backed `/analyze` router is intentionally excluded from `app.main:app`.
 - `api/fixtures/` is a development and test aid for extraction behavior, not a production API surface.
-- `web` CI runs both `npm run lint` and `npm run build`.
+- `web` CI runs `npm run lint`, `npm run build`, and browser E2E.
 - Webhook, Celery, and digest logs include stable tracing fields such as `event_type`, `action`, `workspace_id`, `pr_number`, `installation_id`, `pr_id`, `year`, and `week`.
-- 直近の実装修正や判断メモは `CHANGE_SUMMARY.md` に記録しています。
+- The implementation summary lives in `CHANGE_SUMMARY.md`.
 
 ## Key Decisions Reflected in the Current Code
 

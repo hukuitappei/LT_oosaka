@@ -10,6 +10,7 @@ from app.db.models import User, Workspace
 from app.db.session import get_db
 from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
 from app.services.workspaces import (
+    WorkspaceSummary,
     WorkspaceMemberAlreadyExistsError,
     WorkspaceMemberNotFoundError,
     WorkspaceDeleteConfirmationError,
@@ -18,9 +19,10 @@ from app.services.workspaces import (
     WorkspacePermissionError,
     WorkspaceUserNotFoundError,
     add_workspace_member_to_workspace,
-    create_workspace,
-    get_user_workspace,
-    list_user_workspaces,
+    create_workspace_for_user,
+    get_current_workspace_summary,
+    get_user_workspace_summary,
+    list_user_workspace_summaries,
     purge_workspace,
     update_workspace_member_role_in_workspace,
 )
@@ -62,23 +64,16 @@ class PurgeWorkspaceResponse(BaseModel):
     deleted_memberships: int
 
 
+def _workspace_out(summary: WorkspaceSummary) -> WorkspaceOut:
+    return WorkspaceOut(**summary.__dict__)
+
+
 @router.get("/", response_model=list[WorkspaceOut])
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await list_user_workspaces(db, current_user.id)
-    return [
-        WorkspaceOut(
-            id=workspace.id,
-            name=workspace.name,
-            slug=workspace.slug,
-            is_personal=workspace.is_personal,
-            role=role,
-            created_at=workspace.created_at,
-        )
-        for workspace, role in result
-    ]
+    return [_workspace_out(summary) for summary in await list_user_workspace_summaries(db, current_user.id)]
 
 
 @router.post("/", response_model=WorkspaceOut, status_code=status.HTTP_201_CREATED)
@@ -87,17 +82,7 @@ async def create_workspace_endpoint(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await create_workspace(db, name=request.name, owner=current_user)
-    await db.commit()
-    await db.refresh(workspace)
-    return WorkspaceOut(
-        id=workspace.id,
-        name=workspace.name,
-        slug=workspace.slug,
-        is_personal=workspace.is_personal,
-        role="owner",
-        created_at=workspace.created_at,
-    )
+    return _workspace_out(await create_workspace_for_user(db, name=request.name, owner=current_user))
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceOut)
@@ -107,17 +92,10 @@ async def get_workspace(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        workspace, role = await get_user_workspace(db, workspace_id, current_user.id)
+        summary = await get_user_workspace_summary(db, workspace_id, current_user.id)
     except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return WorkspaceOut(
-        id=workspace.id,
-        name=workspace.name,
-        slug=workspace.slug,
-        is_personal=workspace.is_personal,
-        role=role,
-        created_at=workspace.created_at,
-    )
+    return _workspace_out(summary)
 
 
 @router.post("/{workspace_id}/members", status_code=status.HTTP_201_CREATED)
@@ -177,19 +155,18 @@ async def get_current_workspace_context(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    member = await require_workspace_role(
+    await require_workspace_role(
         {"owner", "admin", "member"},
         current_user=current_user,
         current_workspace=workspace,
         db=db,
     )
-    return WorkspaceOut(
-        id=workspace.id,
-        name=workspace.name,
-        slug=workspace.slug,
-        is_personal=workspace.is_personal,
-        role=member.role,
-        created_at=workspace.created_at,
+    return _workspace_out(
+        await get_current_workspace_summary(
+            db,
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+        )
     )
 
 

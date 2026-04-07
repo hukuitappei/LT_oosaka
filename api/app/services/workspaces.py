@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +48,27 @@ class WorkspacePurgeResult:
     deleted_weekly_digests: int
     deleted_github_connections: int
     deleted_memberships: int
+
+
+@dataclass(frozen=True)
+class WorkspaceSummary:
+    id: int
+    name: str
+    slug: str
+    is_personal: bool
+    role: str
+    created_at: datetime
+
+
+def build_workspace_summary(workspace: Workspace, role: str) -> WorkspaceSummary:
+    return WorkspaceSummary(
+        id=workspace.id,
+        name=workspace.name,
+        slug=workspace.slug,
+        is_personal=workspace.is_personal,
+        role=role,
+        created_at=workspace.created_at,
+    )
 
 
 def _slugify(value: str) -> str:
@@ -99,6 +121,18 @@ async def create_workspace(
     return workspace
 
 
+async def create_workspace_for_user(
+    db: AsyncSession,
+    *,
+    name: str,
+    owner: User,
+) -> WorkspaceSummary:
+    workspace = await create_workspace(db, name=name, owner=owner)
+    await db.commit()
+    await db.refresh(workspace)
+    return build_workspace_summary(workspace, "owner")
+
+
 async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
     stmt = (
         select(Workspace)
@@ -115,6 +149,15 @@ async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
 
     name = f"{user.email.split('@')[0]}'s workspace"
     return await create_workspace(db, name=name, owner=user, is_personal=True)
+
+
+async def get_current_workspace_summary(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    user_id: int,
+) -> WorkspaceSummary:
+    return await get_user_workspace_summary(db, workspace_id, user_id)
 
 
 def workspace_with_role_query(user_id: int):
@@ -134,6 +177,16 @@ async def list_user_workspaces(
     return [(workspace, role) for workspace, role in result.all()]
 
 
+async def list_user_workspace_summaries(
+    db: AsyncSession,
+    user_id: int,
+) -> list[WorkspaceSummary]:
+    return [
+        build_workspace_summary(workspace, role)
+        for workspace, role in await list_user_workspaces(db, user_id)
+    ]
+
+
 async def get_user_workspace(
     db: AsyncSession,
     workspace_id: int,
@@ -148,6 +201,15 @@ async def get_user_workspace(
     if result is None:
         raise WorkspaceNotFoundError
     return result
+
+
+async def get_user_workspace_summary(
+    db: AsyncSession,
+    workspace_id: int,
+    user_id: int,
+) -> WorkspaceSummary:
+    workspace, role = await get_user_workspace(db, workspace_id, user_id)
+    return build_workspace_summary(workspace, role)
 
 
 async def get_workspace_by_id(

@@ -51,6 +51,24 @@ async def test_list_user_workspaces_returns_roles_in_order(db_session):
 
 
 @pytest.mark.asyncio
+async def test_list_user_workspace_summaries_returns_role_aware_dtos(db_session):
+    from app.services.workspaces import list_user_workspace_summaries
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="admin"))
+    await db_session.commit()
+
+    result = await list_user_workspace_summaries(db_session, user.id)
+
+    assert len(result) == 1
+    assert result[0].name == "Alpha"
+    assert result[0].role == "admin"
+
+
+@pytest.mark.asyncio
 async def test_get_user_workspace_requires_membership(db_session):
     from app.services.workspaces import WorkspaceNotFoundError, get_user_workspace
 
@@ -70,6 +88,49 @@ async def test_get_user_workspace_requires_membership(db_session):
 
     with pytest.raises(WorkspaceNotFoundError):
         await get_user_workspace(db_session, workspace.id, user.id + 100)
+
+
+@pytest.mark.asyncio
+async def test_get_current_workspace_summary_returns_membership_role(db_session):
+    from app.services.workspaces import get_current_workspace_summary
+
+    user = User(email="member@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    summary = await get_current_workspace_summary(
+        db_session,
+        workspace_id=workspace.id,
+        user_id=user.id,
+    )
+
+    assert summary.id == workspace.id
+    assert summary.role == "member"
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_for_user_commits_owner_membership(db_session):
+    from app.services.workspaces import create_workspace_for_user
+
+    owner = User(email="owner@example.com", hashed_password="hashed::pw")
+    db_session.add(owner)
+    await db_session.commit()
+
+    summary = await create_workspace_for_user(db_session, name="Alpha", owner=owner)
+
+    assert summary.name == "Alpha"
+    assert summary.role == "owner"
+    membership = await db_session.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == summary.id,
+            WorkspaceMember.user_id == owner.id,
+        )
+    )
+    assert membership is not None
+    assert membership.role == "owner"
 
 
 @pytest.mark.asyncio

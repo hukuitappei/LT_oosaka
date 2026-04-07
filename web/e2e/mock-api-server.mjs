@@ -8,6 +8,8 @@ const tokenResponse = {
   default_workspace_id: 1,
 }
 
+const emptyWorkspaceToken = "e2e-empty"
+
 const learningItems = [
   {
     id: 1,
@@ -41,7 +43,7 @@ const weeklyDigests = [
     year: 2026,
     week: 13,
     summary: "Validation and API boundary handling improved.",
-    repeated_issues: [],
+    repeated_issues: ["Validation checks were missing at the request boundary."],
     next_time_notes: ["Keep boundary validation early."],
     pr_count: 1,
     learning_count: 1,
@@ -104,9 +106,29 @@ async function readJsonBody(req) {
   return raw ? JSON.parse(raw) : {}
 }
 
+async function readTextBody(req) {
+  const chunks = []
+  for await (const chunk of req) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks).toString("utf8")
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" })
   res.end(JSON.stringify(payload))
+}
+
+function getBearerToken(req) {
+  const header = req.headers.authorization ?? ""
+  if (!header.startsWith("Bearer ")) {
+    return ""
+  }
+  return header.slice("Bearer ".length)
+}
+
+function isEmptyWorkspaceRequest(req) {
+  return getBearerToken(req) === emptyWorkspaceToken
 }
 
 const server = http.createServer(async (req, res) => {
@@ -117,22 +139,46 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/auth/login") {
+    const body = await readTextBody(req)
+    const form = new URLSearchParams(body)
+    const username = form.get("username") ?? ""
+    const password = form.get("password") ?? ""
+    if (username === "fail@example.com" || password === "wrong-password") {
+      return sendJson(res, 401, { detail: "Invalid credentials" })
+    }
     return sendJson(res, 200, tokenResponse)
   }
 
   if (req.method === "GET" && url.pathname === "/learning-items/") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, [])
+    }
     return sendJson(res, 200, learningItems)
   }
 
   if (req.method === "GET" && url.pathname === "/learning-items/summary") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, {
+        total_learning_items: 0,
+        current_week_count: 0,
+        weekly_points: [],
+        top_categories: [],
+      })
+    }
     return sendJson(res, 200, learningItemsSummary)
   }
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, [])
+    }
     return sendJson(res, 200, weeklyDigests)
   }
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/1") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 404, { detail: "Not found" })
+    }
     return sendJson(res, 200, weeklyDigests[0])
   }
 

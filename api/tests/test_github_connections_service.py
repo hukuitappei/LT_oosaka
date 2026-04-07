@@ -157,14 +157,40 @@ async def test_delete_visible_github_connection_rejects_non_admin_workspace_memb
 
 
 @pytest.mark.asyncio
-async def test_create_token_github_connection_for_workspace_context_resolves_workspace(db_session):
-    from app.services.github_connections import create_token_github_connection_for_workspace_context
+async def test_create_token_github_connection_for_workspace_context_requires_admin_membership(db_session):
+    from app.services.github_connections import (
+        GitHubConnectionWorkspacePermissionError,
+        create_token_github_connection_for_workspace_context,
+    )
 
     user = User(email="owner@example.com", hashed_password="hashed::pw")
     workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
     db_session.add_all([user, workspace])
     await db_session.flush()
     db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    with pytest.raises(GitHubConnectionWorkspacePermissionError):
+        await create_token_github_connection_for_workspace_context(
+            db_session,
+            requested_workspace_id=None,
+            current_workspace_id=workspace.id,
+            user_id=user.id,
+            access_token="secret-token",
+            github_account_login="octocat",
+            label="primary",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_token_github_connection_for_workspace_context_creates_connection_for_admin(db_session):
+    from app.services.github_connections import create_token_github_connection_for_workspace_context
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="admin"))
     await db_session.commit()
 
     connection = await create_token_github_connection_for_workspace_context(
@@ -217,13 +243,39 @@ async def test_get_visible_github_connection_access_token_decrypts_stored_token(
 
 @pytest.mark.asyncio
 async def test_link_app_github_connection_for_workspace_context_resolves_workspace(db_session):
-    from app.services.github_connections import link_app_github_connection_for_workspace_context
+    from app.services.github_connections import (
+        GitHubConnectionWorkspacePermissionError,
+        link_app_github_connection_for_workspace_context,
+    )
 
     user = User(email="owner@example.com", hashed_password="hashed::pw")
     workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
     db_session.add_all([user, workspace])
     await db_session.flush()
     db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    await db_session.commit()
+
+    with pytest.raises(GitHubConnectionWorkspacePermissionError):
+        await link_app_github_connection_for_workspace_context(
+            db_session,
+            requested_workspace_id=None,
+            current_workspace_id=workspace.id,
+            user_id=user.id,
+            installation_id=42,
+            github_account_login="octocat",
+            label="primary",
+        )
+
+
+@pytest.mark.asyncio
+async def test_link_app_github_connection_for_workspace_context_resolves_workspace_for_owner(db_session):
+    from app.services.github_connections import link_app_github_connection_for_workspace_context
+
+    user = User(email="owner@example.com", hashed_password="hashed::pw")
+    workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
+    db_session.add_all([user, workspace])
+    await db_session.flush()
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
     await db_session.commit()
 
     connection = await link_app_github_connection_for_workspace_context(
@@ -249,7 +301,7 @@ async def test_resolve_github_connection_workspace_uses_current_workspace_when_r
     workspace = Workspace(name="Alpha", slug="alpha", is_personal=False)
     db_session.add_all([user, workspace])
     await db_session.flush()
-    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="member"))
+    db_session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="admin"))
     await db_session.commit()
 
     resolved = await resolve_github_connection_workspace(

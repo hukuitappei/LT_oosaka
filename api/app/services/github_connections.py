@@ -23,6 +23,36 @@ class GitHubConnectionWorkspaceDeletePermissionError(Exception):
     pass
 
 
+async def require_github_connection_admin_workspace(
+    db: AsyncSession,
+    *,
+    requested_workspace_id: int | None,
+    current_workspace_id: int,
+    user_id: int,
+    permission_error_cls: type[Exception] = GitHubConnectionWorkspacePermissionError,
+) -> Workspace:
+    workspace_id = current_workspace_id if requested_workspace_id is None else requested_workspace_id
+    row = await db.execute(
+        select(Workspace, WorkspaceMember.role)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(
+            Workspace.id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    result = row.first()
+    if result is None:
+        workspace = await db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise GitHubConnectionWorkspaceNotFoundError
+        raise permission_error_cls
+
+    workspace, role = result
+    if role not in {"owner", "admin"}:
+        raise permission_error_cls
+    return workspace
+
+
 async def get_visible_github_connection(
     db: AsyncSession,
     *,
@@ -81,23 +111,13 @@ async def resolve_github_connection_workspace(
     current_workspace_id: int,
     user_id: int,
 ) -> Workspace:
-    workspace_id = current_workspace_id if requested_workspace_id is None else requested_workspace_id
-    row = await db.execute(
-        select(Workspace, WorkspaceMember.role)
-        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
-        .where(
-            Workspace.id == workspace_id,
-            WorkspaceMember.user_id == user_id,
-        )
+    return await require_github_connection_admin_workspace(
+        db,
+        requested_workspace_id=requested_workspace_id,
+        current_workspace_id=current_workspace_id,
+        user_id=user_id,
+        permission_error_cls=GitHubConnectionWorkspacePermissionError,
     )
-    result = row.first()
-    if result is None:
-        workspace = await db.get(Workspace, workspace_id)
-        if workspace is None:
-            raise GitHubConnectionWorkspaceNotFoundError
-        raise GitHubConnectionWorkspacePermissionError
-    workspace, _role = result
-    return workspace
 
 
 async def create_token_github_connection_for_workspace_context(
@@ -225,13 +245,12 @@ async def delete_visible_github_connection(
         user_id=user_id,
     )
     if connection.workspace_id is not None:
-        role = await db.scalar(
-            select(WorkspaceMember.role).where(
-                WorkspaceMember.workspace_id == workspace_id,
-                WorkspaceMember.user_id == user_id,
-            )
+        await require_github_connection_admin_workspace(
+            db,
+            requested_workspace_id=connection.workspace_id,
+            current_workspace_id=workspace_id,
+            user_id=user_id,
+            permission_error_cls=GitHubConnectionWorkspaceDeletePermissionError,
         )
-        if role not in {"owner", "admin"}:
-            raise GitHubConnectionWorkspaceDeletePermissionError
     await db.delete(connection)
     await db.commit()

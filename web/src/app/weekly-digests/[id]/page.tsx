@@ -17,10 +17,14 @@ export default async function WeeklyDigestDetailPage({
   if (!digest) notFound()
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
+    <main className="mx-auto min-h-screen max-w-4xl px-6 py-10" data-testid="weekly-digest-detail">
       <div className="mb-6 flex items-center gap-4">
-        <Link href="/weekly-digests" className="text-sm text-stone-400 hover:text-stone-200">
-          ← 週次ダイジェスト
+        <Link
+          href="/weekly-digests"
+          className="text-sm text-stone-400 hover:text-stone-200"
+          data-testid="weekly-digest-back-link"
+        >
+          週次ダイジェスト
         </Link>
         <h1 className="text-2xl font-semibold text-white">
           {digest.year}年 第{digest.week}週のダイジェスト
@@ -32,13 +36,19 @@ export default async function WeeklyDigestDetailPage({
         <span>学び {digest.learning_count}件</span>
       </div>
 
-      <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
-        <h2 className="mb-3 font-semibold text-white">今週のまとめ</h2>
+      <section
+        className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+        data-testid="weekly-digest-summary"
+      >
+        <h2 className="mb-3 font-semibold text-white">要約</h2>
         <p className="leading-7 text-stone-300">{digest.summary}</p>
       </section>
 
       {digest.repeated_issues.length > 0 && (
-        <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <section
+          className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+          data-testid="weekly-digest-repeated-issues"
+        >
           <h2 className="mb-3 font-semibold text-white">繰り返し出た論点</h2>
           <ul className="space-y-1">
             {digest.repeated_issues.map((issue, index) => (
@@ -52,8 +62,11 @@ export default async function WeeklyDigestDetailPage({
       )}
 
       {digest.next_time_notes.length > 0 && (
-        <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
-          <h2 className="mb-3 font-semibold text-white">次回に向けたメモ</h2>
+        <section
+          className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+          data-testid="weekly-digest-next-time-notes"
+        >
+          <h2 className="mb-3 font-semibold text-white">次回へのメモ</h2>
           <ul className="space-y-1">
             {digest.next_time_notes.map((note, index) => (
               <li key={index} className="flex gap-2 text-sm text-stone-300">

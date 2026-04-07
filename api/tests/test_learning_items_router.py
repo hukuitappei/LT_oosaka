@@ -14,7 +14,6 @@ async def test_list_learning_items_passes_filters_to_service(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     items = [SimpleNamespace(id=1)]
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(routes, "list_workspace_learning_items", AsyncMock(return_value=items))
 
     result = await routes.list_learning_items(
@@ -42,7 +41,6 @@ async def test_get_learning_item_returns_404_when_missing(monkeypatch):
     current_user = SimpleNamespace(id=7)
     current_workspace = SimpleNamespace(id=3)
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
         "get_workspace_learning_item",
@@ -70,7 +68,6 @@ async def test_get_learning_items_summary_clamps_weeks(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     summary = SimpleNamespace(total_learning_items=0)
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(routes, "summarize_workspace_learning_items", AsyncMock(return_value=summary))
 
     result = await routes.get_learning_items_summary(

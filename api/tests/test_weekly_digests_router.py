@@ -14,7 +14,6 @@ async def test_list_weekly_digests_returns_service_result(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     digests = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(routes, "list_workspace_weekly_digests", AsyncMock(return_value=digests))
 
     response = await routes.list_weekly_digests(
@@ -35,7 +34,6 @@ async def test_get_weekly_digest_returns_404_when_missing(monkeypatch):
     current_user = SimpleNamespace(id=7)
     current_workspace = SimpleNamespace(id=3)
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
         "get_workspace_weekly_digest",
@@ -65,7 +63,6 @@ async def test_generate_digest_uses_resolved_period_and_service(monkeypatch):
     period = SimpleNamespace(year=2026, week=13)
     digest = SimpleNamespace(id=5)
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(routes, "resolve_weekly_digest_period", lambda year, week: period)
     monkeypatch.setattr(
         routes,
@@ -98,7 +95,6 @@ async def test_generate_digest_returns_400_when_provider_missing(monkeypatch):
     current_workspace = SimpleNamespace(id=3)
     request = SimpleNamespace(year=2026, week=12)
 
-    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock())
     monkeypatch.setattr(
         routes,
         "generate_workspace_weekly_digest",

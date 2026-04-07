@@ -18,22 +18,23 @@ async def test_list_workspaces_returns_service_rows(monkeypatch):
 
     db = SimpleNamespace()
     current_user = SimpleNamespace(id=7)
-    workspace = SimpleNamespace(
+    summary = SimpleNamespace(
         id=3,
         name="Alpha",
         slug="alpha",
         is_personal=False,
+        role="admin",
         created_at=datetime(2026, 3, 27),
     )
 
-    monkeypatch.setattr(routes, "list_user_workspaces", AsyncMock(return_value=[(workspace, "admin")]))
+    monkeypatch.setattr(routes, "list_user_workspace_summaries", AsyncMock(return_value=[summary]))
 
     result = await routes.list_workspaces(current_user=current_user, db=db)
 
     assert len(result) == 1
     assert result[0].id == 3
     assert result[0].role == "admin"
-    routes.list_user_workspaces.assert_awaited_once_with(db, 7)
+    routes.list_user_workspace_summaries.assert_awaited_once_with(db, 7)
 
 
 @pytest.mark.asyncio
@@ -45,7 +46,7 @@ async def test_get_workspace_returns_404_when_membership_missing(monkeypatch):
 
     monkeypatch.setattr(
         routes,
-        "get_user_workspace",
+        "get_user_workspace_summary",
         AsyncMock(side_effect=routes.WorkspaceNotFoundError),
     )
 
@@ -53,7 +54,66 @@ async def test_get_workspace_returns_404_when_membership_missing(monkeypatch):
         await routes.get_workspace(11, current_user=current_user, db=db)
 
     assert exc.value.status_code == 404
-    routes.get_user_workspace.assert_awaited_once_with(db, 11, 7)
+    routes.get_user_workspace_summary.assert_awaited_once_with(db, 11, 7)
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_endpoint_uses_summary_service(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    request = routes.CreateWorkspaceRequest(name="Alpha")
+    summary = SimpleNamespace(
+        id=3,
+        name="Alpha",
+        slug="alpha",
+        is_personal=False,
+        role="owner",
+        created_at=datetime(2026, 3, 27),
+    )
+
+    monkeypatch.setattr(routes, "create_workspace_for_user", AsyncMock(return_value=summary))
+
+    response = await routes.create_workspace_endpoint(request, current_user=current_user, db=db)
+
+    assert response.id == 3
+    assert response.role == "owner"
+    routes.create_workspace_for_user.assert_awaited_once_with(db, name="Alpha", owner=current_user)
+
+
+@pytest.mark.asyncio
+async def test_get_current_workspace_context_uses_summary_service(monkeypatch):
+    from app.routers import workspaces as routes
+
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id=7)
+    workspace = SimpleNamespace(id=3)
+    summary = SimpleNamespace(
+        id=3,
+        name="Alpha",
+        slug="alpha",
+        is_personal=False,
+        role="admin",
+        created_at=datetime(2026, 3, 27),
+    )
+
+    monkeypatch.setattr(routes, "require_workspace_role", AsyncMock(return_value=SimpleNamespace(role="admin")))
+    monkeypatch.setattr(routes, "get_current_workspace_summary", AsyncMock(return_value=summary))
+
+    response = await routes.get_current_workspace_context(
+        workspace=workspace,
+        current_user=current_user,
+        db=db,
+    )
+
+    assert response.id == 3
+    assert response.role == "admin"
+    routes.get_current_workspace_summary.assert_awaited_once_with(
+        db,
+        workspace_id=3,
+        user_id=7,
+    )
 
 
 @pytest.mark.asyncio
