@@ -90,6 +90,11 @@ def test_process_github_webhook_enqueues_review_comment_via_celery(caplog):
         for record in caplog.records
     )
     assert any(
+        f"Webhook stage=handoff task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
         f"Webhook enqueued Celery task task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
         in record.message
         for record in caplog.records
@@ -117,6 +122,11 @@ def test_process_github_webhook_enqueues_merged_pull_request_via_celery(caplog):
     delay_mock.assert_called_once()
     assert delay_mock.call_args.args[0]["correlation_id"] == "github-webhook:pull_request:closed:alice/repo:7:99"
     assert any(
+        "Webhook stage=handoff task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7 installation_id=99 correlation_id=github-webhook:pull_request:closed:alice/repo:7:99"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
         "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7 installation_id=99 correlation_id=github-webhook:pull_request:closed:alice/repo:7:99"
         in record.message
         for record in caplog.records
@@ -142,6 +152,23 @@ def test_process_github_webhook_does_not_enqueue_irrelevant_event(caplog):
         in record.message
         for record in caplog.records
     )
+
+
+def test_prepare_webhook_task_payload_sets_context_without_mutating_input():
+    from app.services.webhook import prepare_webhook_task_payload
+
+    payload = {
+        "action": "created",
+        "pull_request": {"merged": True, "number": 42},
+        "repository": {"full_name": "alice/repo"},
+    }
+
+    prepared = prepare_webhook_task_payload("pull_request_review_comment", payload)
+
+    assert "event_type" not in payload
+    assert "correlation_id" not in payload
+    assert prepared["event_type"] == "pull_request_review_comment"
+    assert prepared["correlation_id"] == "github-webhook:pull_request_review_comment:created:alice/repo:42:na"
 
 
 @pytest.mark.asyncio

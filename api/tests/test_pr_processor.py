@@ -1,7 +1,7 @@
 import logging
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from types import SimpleNamespace
+
+import pytest
 
 
 def _make_webhook_payload(pr_number: int = 42, repo_id: int = 100) -> dict:
@@ -40,8 +40,8 @@ def _make_workspace(workspace_id: int = 1):
 
 @pytest.mark.asyncio
 async def test_process_pr_event_skips_if_already_processed():
-    from app.services.pr_processor import process_pr_event
     from app.config import settings
+    from app.services.pr_processor import process_pr_event
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=_make_workspace())
@@ -51,7 +51,6 @@ async def test_process_pr_event_skips_if_already_processed():
     mock_pr = MagicMock()
     mock_pr.processed = True
     mock_pr.github_pr_number = 42
-    mock_pr.repository_id = 1
 
     mock_db.scalar = AsyncMock(side_effect=[mock_connection, mock_repo, mock_pr])
     mock_db.commit = AsyncMock()
@@ -63,8 +62,9 @@ async def test_process_pr_event_skips_if_already_processed():
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
         monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
-        await process_pr_event(payload, mock_db)
+        result = await process_pr_event(payload, mock_db)
 
+    assert result is None
     mock_db.add.assert_not_called()
     mock_db.commit.assert_called_once()
     assert mock_pr.processed is True
@@ -72,8 +72,8 @@ async def test_process_pr_event_skips_if_already_processed():
 
 @pytest.mark.asyncio
 async def test_process_pr_event_creates_repository_if_not_exists():
-    from app.services.pr_processor import process_pr_event
     from app.config import settings
+    from app.services.pr_processor import process_pr_event
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=_make_workspace())
@@ -99,8 +99,8 @@ async def test_process_pr_event_creates_repository_if_not_exists():
 
 @pytest.mark.asyncio
 async def test_process_pr_event_reuses_existing_repository():
-    from app.services.pr_processor import process_pr_event
     from app.config import settings
+    from app.services.pr_processor import process_pr_event
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=_make_workspace())
@@ -129,8 +129,8 @@ async def test_process_pr_event_reuses_existing_repository():
 
 @pytest.mark.asyncio
 async def test_process_pr_event_no_extraction_without_llm_config():
-    from app.services.pr_processor import process_pr_event
     from app.config import settings
+    from app.services.pr_processor import process_pr_event
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=_make_workspace())
@@ -140,7 +140,6 @@ async def test_process_pr_event_no_extraction_without_llm_config():
     mock_pr = MagicMock()
     mock_pr.processed = False
     mock_pr.github_pr_number = 42
-    mock_pr.repository_id = 1
 
     mock_db.scalar = AsyncMock(side_effect=[_make_workspace_connection(), mock_repo, mock_pr])
     mock_db.commit = AsyncMock()
@@ -152,17 +151,18 @@ async def test_process_pr_event_no_extraction_without_llm_config():
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
         monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
-        await process_pr_event(payload, mock_db)
+        result = await process_pr_event(payload, mock_db)
 
+    assert result is None
     mock_db.add.assert_not_called()
     mock_db.commit.assert_called_once()
     assert mock_pr.processed is False
 
 
 @pytest.mark.asyncio
-async def test_process_pr_event_logs_context_and_success(caplog):
-    from app.services.pr_processor import process_pr_event
+async def test_process_pr_event_returns_extraction_request(caplog):
     from app.config import settings
+    from app.services.pr_processor import process_pr_event
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=_make_workspace())
@@ -173,7 +173,6 @@ async def test_process_pr_event_logs_context_and_success(caplog):
     mock_pr = MagicMock()
     mock_pr.processed = False
     mock_pr.github_pr_number = 42
-    mock_pr.repository_id = 1
     mock_pr.id = 99
 
     mock_db.scalar = AsyncMock(side_effect=[mock_connection, mock_repo, mock_pr])
@@ -188,20 +187,37 @@ async def test_process_pr_event_logs_context_and_success(caplog):
         monkeypatch.setattr(settings, "anthropic_api_key", "test-key", raising=False)
         monkeypatch.setattr(settings, "ollama_base_url", "", raising=False)
         monkeypatch.setattr(
-            "app.services.pr_processor.get_default_llm_provider",
-            MagicMock(return_value=MagicMock()),
+            "app.services.pr_processor._fetch_review_comments",
+            AsyncMock(
+                return_value=[
+                    {
+                        "id": 1,
+                        "user": {"login": "reviewer"},
+                        "body": "guard clause",
+                        "path": "app.py",
+                        "line": 12,
+                        "diff_hunk": "@@ -1 +1 @@",
+                    }
+                ]
+            ),
         )
-        monkeypatch.setattr(
-            "app.services.extractor.extract_from_pr",
-            AsyncMock(return_value=SimpleNamespace(learning_items=[1, 2])),
-        )
-        monkeypatch.setattr("app.services.learning_saver.save_learning_items", AsyncMock())
 
         with caplog.at_level(logging.INFO):
-            await process_pr_event(payload, mock_db)
+            result = await process_pr_event(payload, mock_db)
 
+    assert result is not None
+    assert result.workspace_id == 1
+    assert result.pr_id == 99
+    assert result.pr_number == 42
+    assert result.repo == "owner/repo"
+    assert len(result.pr_dict["review_comments"]) == 1
     assert any(
         "process_pr_event received action=closed repo=owner/repo pr_number=42 installation_id=999" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "process_pr_event stage=workspace_resolution action=closed repo=owner/repo pr_number=42 installation_id=999"
+        in record.message
         for record in caplog.records
     )
     assert any(
@@ -210,12 +226,22 @@ async def test_process_pr_event_logs_context_and_success(caplog):
         for record in caplog.records
     )
     assert any(
-        "process_pr_event starting extraction workspace_id=1 repo=owner/repo pr_number=42 installation_id=999"
+        "process_pr_event stage=repository_upsert workspace_id=1 action=closed repo=owner/repo pr_number=42 installation_id=999"
         in record.message
         for record in caplog.records
     )
     assert any(
-        "Extracted 2 learning items workspace_id=1 repo=owner/repo pr_number=42 installation_id=999"
+        "process_pr_event stage=pull_request_upsert workspace_id=1 action=closed repo=owner/repo pr_number=42 installation_id=999"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "process_pr_event stage=extraction_prepare workspace_id=1 action=closed repo=owner/repo pr_number=42 installation_id=999"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "process_pr_event prepared extraction workspace_id=1 repo=owner/repo pr_number=42 installation_id=999 review_comment_count=1"
         in record.message
         for record in caplog.records
     )

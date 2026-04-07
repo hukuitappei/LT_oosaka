@@ -116,3 +116,46 @@ async def test_learning_items_include_repository_and_pull_request_context(db_ses
     assert len(result) == 1
     assert result[0].repository.full_name == "acme/review-hub"
     assert result[0].pull_request.github_pr_number == 42
+
+
+@pytest.mark.asyncio
+async def test_learning_items_keep_snapshot_context_after_pull_request_is_removed(db_session, monkeypatch):
+    from app.config import settings
+    from app.db.models import LearningItem
+
+    monkeypatch.setattr(settings, "secret_key", "test-secret", raising=False)
+
+    created = await register_user(db_session, "orphan@example.com", "pw-123456")
+    user = await db_session.get(User, int(decode_access_token(created.access_token)["sub"]))
+    workspace = await db_session.get(Workspace, created.default_workspace_id)
+
+    item = LearningItem(
+        workspace_id=workspace.id,
+        pull_request_id=None,
+        schema_version="1.0",
+        title="Retained learning",
+        detail="Still visible after PR deletion.",
+        category="design",
+        confidence=0.9,
+        action_for_next_time="Keep snapshots.",
+        evidence="Retention pipeline.",
+        source_repository_full_name="acme/review-hub",
+        source_repository_name="review-hub",
+        source_github_pr_number=42,
+        source_pr_title="Tighten validation",
+        source_pr_github_url="https://github.com/acme/review-hub/pull/42",
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    result = await list_learning_items(
+        db=db_session,
+        current_user=user,
+        current_workspace=workspace,
+    )
+
+    assert len(result) == 1
+    assert result[0].repository is not None
+    assert result[0].repository.full_name == "acme/review-hub"
+    assert result[0].pull_request is not None
+    assert result[0].pull_request.github_pr_number == 42

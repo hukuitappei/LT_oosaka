@@ -202,3 +202,44 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
     assert [point.label for point in summary.weekly_points] == ["2026-W11", "2026-W12", "2026-W13"]
     assert [point.learning_count for point in summary.weekly_points] == [0, 1, 1]
     assert {(row.category, row.count) for row in summary.top_categories} == {("design", 1), ("testing", 1)}
+
+
+@pytest.mark.asyncio
+async def test_list_workspace_learning_items_uses_snapshot_when_pull_request_is_missing(db_session):
+    from app.db.models import LearningItem, Workspace
+    from app.services.learning_items import list_workspace_learning_items
+
+    workspace = Workspace(name="Alpha", slug="alpha-orphan", is_personal=True)
+    db_session.add(workspace)
+    await db_session.flush()
+
+    db_session.add(
+        LearningItem(
+            workspace_id=workspace.id,
+            pull_request_id=None,
+            schema_version="1.0",
+            title="Retained learning",
+            detail="This should survive source PR deletion.",
+            category="design",
+            confidence=0.9,
+            action_for_next_time="Preserve source snapshots.",
+            evidence="Retention test.",
+            visibility="workspace_shared",
+            source_repository_full_name="owner/repo",
+            source_repository_name="repo",
+            source_github_pr_number=42,
+            source_pr_title="Improve validation",
+            source_pr_github_url="https://example.com/pr/42",
+            created_at=datetime(2026, 3, 3, tzinfo=timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    items = await list_workspace_learning_items(db_session, workspace.id)
+
+    assert [item.title for item in items] == ["Retained learning"]
+    assert items[0].pull_request_id is None
+    assert items[0].repository is not None
+    assert items[0].repository.full_name == "owner/repo"
+    assert items[0].pull_request is not None
+    assert items[0].pull_request.github_pr_number == 42

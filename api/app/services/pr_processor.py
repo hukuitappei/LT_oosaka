@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import GitHubConnection, PullRequest, Repository, Workspace, WorkspaceMember
-from app.llm import get_default_llm_provider
+from app.schemas.handoffs import ExtractionRequest
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ def _webhook_context(payload: dict[str, Any]) -> dict[str, Any]:
         "repo": repo_data.get("full_name", ""),
         "pr_number": pr_data.get("number"),
         "installation_id": payload.get("installation", {}).get("id"),
+        "correlation_id": payload.get("correlation_id"),
     }
 
 
@@ -81,50 +82,22 @@ async def _resolve_workspace_for_connection(
     return None
 
 
-async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
-    repo_data = payload.get("repository", {})
-    pr_data = payload.get("pull_request", {})
-    installation_id = payload.get("installation", {}).get("id")
-    context = _webhook_context(payload)
-
+async def _upsert_repository_for_workspace(
+    db: AsyncSession,
+    *,
+    workspace: Workspace,
+    connection: GitHubConnection | None,
+    repo_data: dict[str, Any],
+    context: dict[str, Any],
+) -> Repository:
     logger.info(
-        "process_pr_event received action=%s repo=%s pr_number=%s installation_id=%s",
-        context["action"],
-        context["repo"],
-        context["pr_number"],
-        context["installation_id"],
-    )
-
-    connection = None
-    if installation_id:
-        connection = await db.scalar(
-            select(GitHubConnection).where(
-                GitHubConnection.provider_type == "app",
-                GitHubConnection.installation_id == installation_id,
-                GitHubConnection.is_active.is_(True),
-            )
-        )
-
-    workspace = await _resolve_workspace_for_connection(db, connection)
-    if workspace is None:
-        logger.warning(
-            "Skipping webhook PR event because no workspace mapping was found action=%s repo=%s pr_number=%s installation_id=%s",
-            context["action"],
-            context["repo"],
-            context["pr_number"],
-            context["installation_id"],
-        )
-        return
-
-    logger.info(
-        "process_pr_event resolved workspace workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        "process_pr_event stage=repository_upsert workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
         workspace.id,
         context["action"],
         context["repo"],
         context["pr_number"],
         context["installation_id"],
     )
-
     repo = await db.scalar(
         select(Repository).where(
             Repository.workspace_id == workspace.id,
@@ -141,7 +114,24 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
         )
         db.add(repo)
         await db.flush()
+    return repo
 
+
+async def _upsert_pull_request_for_repository(
+    db: AsyncSession,
+    *,
+    repo: Repository,
+    pr_data: dict[str, Any],
+    context: dict[str, Any],
+) -> PullRequest:
+    logger.info(
+        "process_pr_event stage=pull_request_upsert workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        repo.workspace_id,
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
     pr = await db.scalar(
         select(PullRequest).where(
             PullRequest.repository_id == repo.id,
@@ -166,10 +156,47 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
         pr.state = "merged" if pr_data.get("merged") else pr_data["state"]
         pr.github_url = pr_data["html_url"]
         pr.merged_at = _parse_github_datetime(pr_data.get("merged_at"))
+    return pr
 
-    await db.commit()
-    await db.refresh(pr)
 
+def _build_learning_extraction_request(
+    *,
+    workspace: Workspace,
+    connection: GitHubConnection | None,
+    pr: PullRequest,
+    pr_dict: dict[str, Any],
+    context: dict[str, Any],
+) -> ExtractionRequest:
+    return ExtractionRequest(
+        workspace_id=workspace.id,
+        pr_id=pr.id,
+        created_by_user_id=connection.user_id if connection else None,
+        repo=context["repo"],
+        pr_number=pr.github_pr_number,
+        installation_id=context["installation_id"],
+        correlation_id=context.get("correlation_id"),
+        pr_dict=pr_dict,
+    )
+
+
+async def _prepare_learning_extraction(
+    *,
+    workspace: Workspace,
+    connection: GitHubConnection | None,
+    payload: dict[str, Any],
+    repo_data: dict[str, Any],
+    pr_data: dict[str, Any],
+    pr: PullRequest,
+    context: dict[str, Any],
+) -> ExtractionRequest | None:
+    logger.info(
+        "process_pr_event stage=extraction_prepare workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        workspace.id,
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
     if pr.processed:
         logger.info(
             "PR already processed, skipping extraction workspace_id=%d repo=%s pr_number=%d installation_id=%s",
@@ -188,47 +215,103 @@ async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> None:
             pr.github_pr_number,
             context["installation_id"],
         )
-        return
+        return None
 
-    try:
-        logger.info(
-            "process_pr_event starting extraction workspace_id=%d repo=%s pr_number=%d installation_id=%s",
-            workspace.id,
-            context["repo"],
-            pr.github_pr_number,
-            context["installation_id"],
+    review_comments = await _fetch_review_comments(payload, repo_data, pr_data)
+    pr_dict = _build_pr_dict_from_payload(pr_data, repo_data, review_comments)
+    logger.info(
+        "process_pr_event prepared extraction workspace_id=%d repo=%s pr_number=%d installation_id=%s review_comment_count=%d",
+        workspace.id,
+        context["repo"],
+        pr.github_pr_number,
+        context["installation_id"],
+        len(pr_dict["review_comments"]),
+    )
+    return _build_learning_extraction_request(
+        workspace=workspace,
+        connection=connection,
+        pr=pr,
+        pr_dict=pr_dict,
+        context=context,
+    )
+
+
+async def process_pr_event(payload: dict[str, Any], db: AsyncSession) -> ExtractionRequest | None:
+    repo_data = payload.get("repository", {})
+    pr_data = payload.get("pull_request", {})
+    installation_id = payload.get("installation", {}).get("id")
+    context = _webhook_context(payload)
+
+    logger.info(
+        "process_pr_event received action=%s repo=%s pr_number=%s installation_id=%s",
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
+
+    connection = None
+    if installation_id:
+        connection = await db.scalar(
+            select(GitHubConnection).where(
+                GitHubConnection.provider_type == "app",
+                GitHubConnection.installation_id == installation_id,
+                GitHubConnection.is_active.is_(True),
+            )
         )
-        review_comments = await _fetch_review_comments(payload, repo_data, pr_data)
-        pr_dict = _build_pr_dict_from_payload(pr_data, repo_data, review_comments)
 
-        from app.services.extractor import extract_from_pr
-        from app.services.learning_saver import save_learning_items
-
-        provider = get_default_llm_provider()
-
-        result = await extract_from_pr(pr_dict, provider)
-        await save_learning_items(
-            result,
-            pr.id,
-            db,
-            created_by_user_id=connection.user_id if connection else None,
-        )
-        logger.info(
-            "Extracted %d learning items workspace_id=%d repo=%s pr_number=%d installation_id=%s",
-            len(result.learning_items),
-            workspace.id,
-            context["repo"],
-            pr.github_pr_number,
-            context["installation_id"],
-        )
-    except Exception:
-        logger.exception(
-            "Learning extraction failed workspace_id=%d repo=%s pr_number=%s installation_id=%s",
-            workspace.id,
+    logger.info(
+        "process_pr_event stage=workspace_resolution action=%s repo=%s pr_number=%s installation_id=%s",
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
+    workspace = await _resolve_workspace_for_connection(db, connection)
+    if workspace is None:
+        logger.warning(
+            "Skipping webhook PR event because no workspace mapping was found action=%s repo=%s pr_number=%s installation_id=%s",
+            context["action"],
             context["repo"],
             context["pr_number"],
             context["installation_id"],
         )
+        return
+
+    logger.info(
+        "process_pr_event resolved workspace workspace_id=%d action=%s repo=%s pr_number=%s installation_id=%s",
+        workspace.id,
+        context["action"],
+        context["repo"],
+        context["pr_number"],
+        context["installation_id"],
+    )
+    repo = await _upsert_repository_for_workspace(
+        db,
+        workspace=workspace,
+        connection=connection,
+        repo_data=repo_data,
+        context=context,
+    )
+    pr = await _upsert_pull_request_for_repository(
+        db,
+        repo=repo,
+        pr_data=pr_data,
+        context=context,
+    )
+
+    await db.commit()
+    await db.refresh(pr)
+
+    return await _prepare_learning_extraction(
+        workspace=workspace,
+        connection=connection,
+        payload=payload,
+        repo_data=repo_data,
+        pr_data=pr_data,
+        pr=pr,
+        context=context,
+    )
 
 
 async def _fetch_review_comments(

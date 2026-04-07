@@ -68,4 +68,4 @@ async def test_request_reanalysis_for_pull_request_enqueues_task(monkeypatch, db
     result = await request_reanalysis_for_pull_request(db_session, pr.id, workspace.id, 7)
 
     assert result == {"status": "accepted", "pr_id": pr.id}
-    delay_mock.assert_called_once_with(pr.id, workspace.id, 7)
+    delay_mock.assert_called_once_with({"pr_id": pr.id, "workspace_id": workspace.id, "user_id": 7})
