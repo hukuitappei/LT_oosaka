@@ -13,3 +13,4 @@ LOG/
 .secret/
 *.log
 *.pem
+*.skill
