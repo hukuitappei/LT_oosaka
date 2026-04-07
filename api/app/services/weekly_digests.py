@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.db.models import LearningReuseEvent, WeeklyDigest
+from app.db.models import LearningItem, LearningReuseEvent, PullRequest, WeeklyDigest
 from app.llm import get_default_llm_provider
+from app.services.reuse_impact_metrics import build_reuse_impact_summary
 
 
 class WeeklyDigestNotFoundError(Exception):
@@ -37,6 +39,8 @@ class WeeklyDigestView:
     learning_count: int
     reuse_event_count: int
     reused_learning_item_count: int
+    recurring_reuse_event_count: int
+    clean_reuse_event_count: int
     visibility: str
     created_at: datetime
 
@@ -113,7 +117,12 @@ async def _build_weekly_digest_view(
     db: AsyncSession,
     digest: WeeklyDigest,
 ) -> WeeklyDigestView:
-    reuse_event_count, reused_learning_item_count = await _fetch_reuse_metrics_for_period(
+    (
+        reuse_event_count,
+        reused_learning_item_count,
+        recurring_reuse_event_count,
+        clean_reuse_event_count,
+    ) = await _fetch_reuse_metrics_for_period(
         db,
         digest.workspace_id,
         digest.year,
@@ -131,6 +140,8 @@ async def _build_weekly_digest_view(
         learning_count=digest.learning_count,
         reuse_event_count=reuse_event_count,
         reused_learning_item_count=reused_learning_item_count,
+        recurring_reuse_event_count=recurring_reuse_event_count,
+        clean_reuse_event_count=clean_reuse_event_count,
         visibility=digest.visibility,
         created_at=digest.created_at,
     )
@@ -141,22 +152,29 @@ async def _fetch_reuse_metrics_for_period(
     workspace_id: int,
     year: int,
     week: int,
-) -> tuple[int, int]:
+) -> tuple[int, int, int, int]:
     from app.services.digest_generator import _get_week_range
 
     week_start, week_end = _get_week_range(year, week)
-    reuse_event_count = await db.scalar(
-        select(func.count(LearningReuseEvent.id)).where(
+    result = await db.execute(
+        select(LearningReuseEvent)
+        .where(
             LearningReuseEvent.workspace_id == workspace_id,
             LearningReuseEvent.created_at >= week_start,
             LearningReuseEvent.created_at <= week_end,
         )
-    )
-    reused_learning_item_count = await db.scalar(
-        select(func.count(distinct(LearningReuseEvent.source_learning_item_id))).where(
-            LearningReuseEvent.workspace_id == workspace_id,
-            LearningReuseEvent.created_at >= week_start,
-            LearningReuseEvent.created_at <= week_end,
+        .options(
+            selectinload(LearningReuseEvent.source_learning_item)
+            .selectinload(LearningItem.pull_request)
+            .selectinload(PullRequest.review_comments),
+            selectinload(LearningReuseEvent.target_pull_request).selectinload(PullRequest.review_comments),
         )
     )
-    return reuse_event_count or 0, reused_learning_item_count or 0
+    reuse_events = list(result.scalars().all())
+    summary = build_reuse_impact_summary(reuse_events)
+    return (
+        summary.total_reuse_events,
+        summary.reused_learning_items_count,
+        summary.recurring_reuse_events,
+        summary.clean_reuse_events,
+    )

@@ -81,6 +81,8 @@ const weeklyDigests = [
     learning_count: 1,
     reuse_event_count: 2,
     reused_learning_item_count: 1,
+    recurring_reuse_event_count: 1,
+    clean_reuse_event_count: 1,
     visibility: "workspace_shared",
     created_at: "2026-03-27T00:00:00Z",
   },
@@ -184,6 +186,8 @@ function summarizeLearningItems() {
     total_reuse_events: 2,
     reused_learning_items_count: 1,
     current_week_reuse_count: 2,
+    recurring_reuse_events: 1,
+    clean_reuse_events: 1,
     weekly_points: [
       { year: 2026, week: 11, label: "2026-W11", learning_count: 0 },
       { year: 2026, week: 12, label: "2026-W12", learning_count: 0 },

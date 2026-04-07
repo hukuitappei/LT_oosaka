@@ -14,3 +14,5 @@ LOG/
 *.log
 *.pem
 *.skill
+_skill_work/
+local-skills/

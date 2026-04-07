@@ -183,7 +183,7 @@ async def test_update_workspace_learning_item_updates_status_and_visibility(db_s
 
 @pytest.mark.asyncio
 async def test_summarize_workspace_learning_items_returns_weekly_points(db_session):
-    from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository, Workspace
+    from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository, ReviewComment, Workspace
     from app.services.learning_items import summarize_workspace_learning_items
 
     workspace = Workspace(name="Alpha", slug="alpha-summary", is_personal=True)
@@ -216,21 +216,32 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
     )
     db_session.add_all([first_pr, second_pr])
     await db_session.flush()
+    db_session.add(
+        ReviewComment(
+            pull_request_id=second_pr.id,
+            github_comment_id=999,
+            author="reviewer",
+            body="Please validate the payload before saving",
+            file_path="api/validators.py",
+            line_number=10,
+            diff_hunk=None,
+        )
+    )
 
     first_item = LearningItem(
-                workspace_id=workspace.id,
-                pull_request_id=first_pr.id,
-                schema_version="1.0",
-                title="Design item",
-                detail="detail",
-                category="design",
-                confidence=0.9,
-                action_for_next_time="act",
-                evidence="evidence",
-                status="new",
-                visibility="workspace_shared",
-                created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
-            )
+                    workspace_id=workspace.id,
+                    pull_request_id=first_pr.id,
+                    schema_version="1.0",
+                    title="Validate payload before persistence",
+                    detail="detail",
+                    category="design",
+                    confidence=0.9,
+                    action_for_next_time="Add payload validation",
+                    evidence="Reviewer asked for payload validation",
+                    status="new",
+                    visibility="workspace_shared",
+                    created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
+                )
     second_item = LearningItem(
                 workspace_id=workspace.id,
                 pull_request_id=second_pr.id,
@@ -277,6 +288,8 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
     assert summary.total_reuse_events == 2
     assert summary.reused_learning_items_count == 1
     assert summary.current_week_reuse_count == 1
+    assert summary.recurring_reuse_events == 1
+    assert summary.clean_reuse_events == 1
     assert [point.label for point in summary.weekly_points] == ["2026-W11", "2026-W12", "2026-W13"]
     assert [point.learning_count for point in summary.weekly_points] == [0, 1, 1]
     assert [point.reuse_count for point in summary.reuse_weekly_points] == [0, 1, 1]

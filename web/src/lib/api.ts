@@ -42,6 +42,8 @@ export interface WeeklyDigest {
   learning_count: number
   reuse_event_count: number
   reused_learning_item_count: number
+  recurring_reuse_event_count: number
+  clean_reuse_event_count: number
   visibility: string
   created_at: string
 }
@@ -52,6 +54,8 @@ export interface LearningItemsSummary {
   total_reuse_events: number
   reused_learning_items_count: number
   current_week_reuse_count: number
+  recurring_reuse_events: number
+  clean_reuse_events: number
   weekly_points: Array<{
     year: number
     week: number

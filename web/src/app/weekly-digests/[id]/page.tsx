@@ -32,6 +32,8 @@ export default async function WeeklyDigestDetailPage({
         <span>Items {digest.learning_count}</span>
         <span>Reuses {digest.reuse_event_count}</span>
         <span>Reused learnings {digest.reused_learning_item_count}</span>
+        <span>Repeated after reuse {digest.recurring_reuse_event_count}</span>
+        <span>Clean reuses {digest.clean_reuse_event_count}</span>
       </div>
 
       <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">

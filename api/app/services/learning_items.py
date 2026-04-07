@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import distinct, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +19,7 @@ from app.schemas.learning_items import (
     PullRequestRef,
     RepositoryRef,
 )
+from app.services.reuse_impact_metrics import build_reuse_impact_summary
 
 
 class LearningItemNotFoundError(Exception):
@@ -182,31 +183,33 @@ async def summarize_workspace_learning_items(
             weekly_counts[key] += 1
 
     reuse_result = await db.execute(
-        select(LearningReuseEvent.source_learning_item_id, LearningReuseEvent.created_at)
+        select(LearningReuseEvent)
         .where(LearningReuseEvent.workspace_id == workspace_id)
+        .options(
+            selectinload(LearningReuseEvent.source_learning_item).selectinload(LearningItem.pull_request).selectinload(PullRequest.review_comments),
+            selectinload(LearningReuseEvent.target_pull_request).selectinload(PullRequest.review_comments),
+        )
         .order_by(LearningReuseEvent.created_at.desc())
     )
-    reuse_rows = reuse_result.all()
+    reuse_events = list(reuse_result.scalars().all())
+    reuse_summary = build_reuse_impact_summary(reuse_events)
 
-    for _, created_at in reuse_rows:
-        created_date = created_at.date()
+    for event in reuse_events:
+        created_date = event.created_at.date()
         year, week, _ = created_date.isocalendar()
         key = (year, week)
         if key in reuse_weekly_counts:
             reuse_weekly_counts[key] += 1
 
     current_year, current_week, _ = today_value.isocalendar()
-    reused_learning_items_count = await db.scalar(
-        select(func.count(distinct(LearningReuseEvent.source_learning_item_id))).where(
-            LearningReuseEvent.workspace_id == workspace_id
-        )
-    )
     return LearningItemsSummaryResponse(
         total_learning_items=len(rows),
         current_week_count=weekly_counts.get((current_year, current_week), 0),
-        total_reuse_events=len(reuse_rows),
-        reused_learning_items_count=reused_learning_items_count or 0,
+        total_reuse_events=reuse_summary.total_reuse_events,
+        reused_learning_items_count=reuse_summary.reused_learning_items_count,
         current_week_reuse_count=reuse_weekly_counts.get((current_year, current_week), 0),
+        recurring_reuse_events=reuse_summary.recurring_reuse_events,
+        clean_reuse_events=reuse_summary.clean_reuse_events,
         weekly_points=[
             LearningItemsWeeklyPoint(
                 year=point.year,

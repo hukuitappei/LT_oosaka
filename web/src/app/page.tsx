@@ -167,6 +167,8 @@ export default async function Home() {
               <div className="mb-4 flex flex-wrap gap-3 text-xs text-stone-400">
                 <span>Reuse events {latestDigest.reuse_event_count}</span>
                 <span>Reused learnings {latestDigest.reused_learning_item_count}</span>
+                <span>Repeated after reuse {latestDigest.recurring_reuse_event_count}</span>
+                <span>Clean reuses {latestDigest.clean_reuse_event_count}</span>
               </div>
               <Link
                 href={`/weekly-digests/${latestDigest.id}`}
@@ -245,6 +247,22 @@ export default async function Home() {
                   <span className="text-stone-200">Current week reuse events</span>
                   <span className="font-mono text-stone-400">
                     {learningSummary?.current_week_reuse_count ?? 0}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">Repeated after reuse</span>
+                  <span className="font-mono text-stone-400">
+                    {learningSummary?.recurring_reuse_events ?? 0}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">Clean reuses</span>
+                  <span className="font-mono text-stone-400">
+                    {learningSummary?.clean_reuse_events ?? 0}
                   </span>
                 </div>
               </div>

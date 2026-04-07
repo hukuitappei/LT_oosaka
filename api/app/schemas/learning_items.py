@@ -73,6 +73,8 @@ class LearningItemsSummaryResponse(BaseModel):
     total_reuse_events: int
     reused_learning_items_count: int
     current_week_reuse_count: int
+    recurring_reuse_events: int
+    clean_reuse_events: int
     weekly_points: list[LearningItemsWeeklyPoint]
     reuse_weekly_points: list[LearningItemsReusePoint]
     top_categories: list[LearningItemsCategoryCount]

@@ -5,10 +5,10 @@ import json
 import logging
 from datetime import date, timedelta
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import LearningItem, LearningReuseEvent, WeeklyDigest
+from app.db.models import LearningItem, WeeklyDigest
 from app.llm.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
@@ -57,22 +57,12 @@ async def fetch_learning_reuse_metrics_for_week(
     workspace_id: int,
     db: AsyncSession,
 ) -> tuple[int, int]:
-    week_start, week_end = _get_week_range(year, week)
-    reuse_event_count = await db.scalar(
-        select(func.count(LearningReuseEvent.id)).where(
-            LearningReuseEvent.workspace_id == workspace_id,
-            LearningReuseEvent.created_at >= week_start,
-            LearningReuseEvent.created_at <= week_end,
-        )
+    from app.services.weekly_digests import _fetch_reuse_metrics_for_period
+
+    reuse_event_count, reused_learning_item_count, _, _ = await _fetch_reuse_metrics_for_period(
+        db, workspace_id, year, week
     )
-    reused_learning_item_count = await db.scalar(
-        select(func.count(distinct(LearningReuseEvent.source_learning_item_id))).where(
-            LearningReuseEvent.workspace_id == workspace_id,
-            LearningReuseEvent.created_at >= week_start,
-            LearningReuseEvent.created_at <= week_end,
-        )
-    )
-    return reuse_event_count or 0, reused_learning_item_count or 0
+    return reuse_event_count, reused_learning_item_count
 
 
 def _build_digest_prompt(
@@ -82,6 +72,8 @@ def _build_digest_prompt(
     *,
     reuse_event_count: int,
     reused_learning_item_count: int,
+    recurring_reuse_event_count: int,
+    clean_reuse_event_count: int,
 ) -> str:
     lines = [f"## {year} Week {week} learning items ({len(items)} items)", ""]
     by_category: dict[str, list[LearningItem]] = {}
@@ -98,6 +90,8 @@ def _build_digest_prompt(
     lines.append("## Reuse signals")
     lines.append(f"- Reuse events recorded this week: {reuse_event_count}")
     lines.append(f"- Unique learning items reused this week: {reused_learning_item_count}")
+    lines.append(f"- Repeated review signals after reuse: {recurring_reuse_event_count}")
+    lines.append(f"- Clean reuses without repeated review signals: {clean_reuse_event_count}")
     lines.append("")
     lines.append("Summarize the weekly reflection based on the learning items above.")
     return "\n".join(lines)
@@ -111,17 +105,24 @@ async def generate_weekly_digest(
     db: AsyncSession,
 ) -> WeeklyDigest:
     items = await fetch_learning_items_for_week(year, week, workspace_id, db)
-    reuse_event_count, reused_learning_item_count = await fetch_learning_reuse_metrics_for_week(
-        year, week, workspace_id, db
-    )
+    from app.services.weekly_digests import _fetch_reuse_metrics_for_period
+
+    (
+        reuse_event_count,
+        reused_learning_item_count,
+        recurring_reuse_event_count,
+        clean_reuse_event_count,
+    ) = await _fetch_reuse_metrics_for_period(db, workspace_id, year, week)
     logger.info(
-        "generate_weekly_digest started workspace_id=%d year=%d week=%d item_count=%d reuse_event_count=%d reused_learning_item_count=%d",
+        "generate_weekly_digest started workspace_id=%d year=%d week=%d item_count=%d reuse_event_count=%d reused_learning_item_count=%d recurring_reuse_event_count=%d clean_reuse_event_count=%d",
         workspace_id,
         year,
         week,
         len(items),
         reuse_event_count,
         reused_learning_item_count,
+        recurring_reuse_event_count,
+        clean_reuse_event_count,
     )
 
     if not items:
@@ -143,6 +144,8 @@ async def generate_weekly_digest(
                 week,
                 reuse_event_count=reuse_event_count,
                 reused_learning_item_count=reused_learning_item_count,
+                recurring_reuse_event_count=recurring_reuse_event_count,
+                clean_reuse_event_count=clean_reuse_event_count,
             ),
             provider,
             workspace_id=workspace_id,

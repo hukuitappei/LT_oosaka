@@ -36,6 +36,12 @@ export default async function WeeklyDigestsPage() {
                 <p className="mt-3 text-xs text-stone-500">
                   Reused learning items {digest.reused_learning_item_count}
                 </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  Repeated after reuse {digest.recurring_reuse_event_count}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  Clean reuses {digest.clean_reuse_event_count}
+                </p>
               </div>
             </Link>
           ))}

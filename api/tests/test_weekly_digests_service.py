@@ -7,7 +7,15 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_list_workspace_weekly_digests_returns_descending_order(db_session):
-    from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository, WeeklyDigest, Workspace
+    from app.db.models import (
+        LearningItem,
+        LearningReuseEvent,
+        PullRequest,
+        Repository,
+        ReviewComment,
+        WeeklyDigest,
+        Workspace,
+    )
     from app.services.weekly_digests import list_workspace_weekly_digests
 
     workspace = Workspace(name="Alpha", slug="alpha-digest-list", is_personal=True)
@@ -28,16 +36,28 @@ async def test_list_workspace_weekly_digests_returns_descending_order(db_session
     )
     db_session.add(pr)
     await db_session.flush()
+    db_session.add(
+        ReviewComment(
+            pull_request_id=pr.id,
+            github_comment_id=1001,
+            author="reviewer",
+            body="Please validate the payload before persistence",
+            file_path="api/validators.py",
+            line_number=10,
+            diff_hunk=None,
+            created_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+        )
+    )
     item = LearningItem(
         workspace_id=workspace.id,
         pull_request_id=pr.id,
         schema_version="1.0",
-        title="lesson",
+        title="Validate payload before persistence",
         detail="detail",
         category="design",
         confidence=0.9,
-        action_for_next_time="act",
-        evidence="evidence",
+        action_for_next_time="Add payload validation",
+        evidence="Reviewer asked for payload validation",
         created_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
     )
     db_session.add(item)
@@ -67,11 +87,21 @@ async def test_list_workspace_weekly_digests_returns_descending_order(db_session
     assert [(digest.year, digest.week) for digest in digests] == [(2026, 12)]
     assert digests[0].reuse_event_count == 1
     assert digests[0].reused_learning_item_count == 1
+    assert digests[0].recurring_reuse_event_count == 1
+    assert digests[0].clean_reuse_event_count == 0
 
 
 @pytest.mark.asyncio
 async def test_get_workspace_weekly_digest_filters_by_workspace(db_session):
-    from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository, WeeklyDigest, Workspace
+    from app.db.models import (
+        LearningItem,
+        LearningReuseEvent,
+        PullRequest,
+        Repository,
+        ReviewComment,
+        WeeklyDigest,
+        Workspace,
+    )
     from app.services.weekly_digests import (
         WeeklyDigestNotFoundError,
         get_workspace_weekly_digest,
@@ -95,16 +125,28 @@ async def test_get_workspace_weekly_digest_filters_by_workspace(db_session):
     )
     db_session.add(pr)
     await db_session.flush()
+    db_session.add(
+        ReviewComment(
+            pull_request_id=pr.id,
+            github_comment_id=1002,
+            author="reviewer",
+            body="Please validate the payload before persistence",
+            file_path="api/validators.py",
+            line_number=10,
+            diff_hunk=None,
+            created_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+        )
+    )
     item = LearningItem(
         workspace_id=workspace.id,
         pull_request_id=pr.id,
         schema_version="1.0",
-        title="lesson",
+        title="Validate payload before persistence",
         detail="detail",
         category="design",
         confidence=0.9,
-        action_for_next_time="act",
-        evidence="evidence",
+        action_for_next_time="Add payload validation",
+        evidence="Reviewer asked for payload validation",
         created_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
     )
     db_session.add(item)
@@ -127,6 +169,8 @@ async def test_get_workspace_weekly_digest_filters_by_workspace(db_session):
     assert found.id == digest.id
     assert found.reuse_event_count == 1
     assert found.reused_learning_item_count == 1
+    assert found.recurring_reuse_event_count == 1
+    assert found.clean_reuse_event_count == 0
 
     with pytest.raises(WeeklyDigestNotFoundError):
         await get_workspace_weekly_digest(db_session, digest.id, workspace.id + 1)
@@ -211,6 +255,8 @@ async def test_generate_workspace_weekly_digest_delegates_to_digest_generator(mo
     assert result.id == 5
     assert result.reuse_event_count == 0
     assert result.reused_learning_item_count == 0
+    assert result.recurring_reuse_event_count == 0
+    assert result.clean_reuse_event_count == 0
     delegate.assert_awaited_once_with(2026, 12, 7, provider, db_session)
 
 

@@ -26,6 +26,8 @@ test("redirects anonymous users and renders authenticated pages with seeded auth
   await expect(page).toHaveURL("/")
   await expect(page.getByRole("link", { name: "Learning Items" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Weekly Digests" }).first()).toBeVisible()
+  await expect(page.getByText("Repeated after reuse 1")).toBeVisible()
+  await expect(page.getByText("Clean reuses 1")).toBeVisible()
 
   await page.getByRole("link", { name: "Learning Items" }).first().click()
   await expect(page).toHaveURL(/\/learning-items$/)
@@ -46,6 +48,7 @@ test("redirects anonymous users and renders authenticated pages with seeded auth
   await expect(page).toHaveURL(/\/weekly-digests$/)
   await expect(page.getByText("Validation and API boundary handling improved.")).toBeVisible()
   await expect(page.getByText("Reuses 2")).toBeVisible()
+  await expect(page.getByText("Repeated after reuse 1")).toBeVisible()
 
   await page.getByRole("link", { name: "PR Knowledge Hub" }).click()
   await expect(page).toHaveURL("/")
