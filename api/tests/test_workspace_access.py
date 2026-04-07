@@ -31,13 +31,40 @@ async def test_current_workspace_context_uses_header_workspace_id(db_session, mo
     workspace = await get_current_workspace(
         current_user=user,
         db=db_session,
+        space_header=None,
         workspace_header=workspace.id,
+        space_cookie=None,
         workspace_cookie=None,
     )
     result = await get_current_workspace_context(workspace=workspace, current_user=user, db=db_session)
 
     assert result.id == workspace.id
     assert result.role == "owner"
+
+
+@pytest.mark.asyncio
+async def test_current_workspace_context_uses_header_space_id(db_session, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "secret_key", "test-secret", raising=False)
+
+    created = await register_user(db_session, "space-header@example.com", "pw-123456")
+    payload = decode_access_token(created.access_token)
+    user = await db_session.get(User, int(payload["sub"]))
+
+    workspace = await db_session.get(Workspace, created.default_workspace_id)
+    assert workspace is not None
+
+    workspace = await get_current_workspace(
+        current_user=user,
+        db=db_session,
+        space_header=workspace.id,
+        workspace_header=None,
+        space_cookie=None,
+        workspace_cookie=None,
+    )
+
+    assert workspace.id == created.default_space_id
 
 
 

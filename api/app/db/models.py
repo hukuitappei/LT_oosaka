@@ -65,6 +65,11 @@ class Workspace(Base):
     weekly_digests: Mapped[list["WeeklyDigest"]] = relationship(back_populates="workspace")
     learning_items: Mapped[list["LearningItem"]] = relationship(back_populates="workspace")
     github_connections: Mapped[list["GitHubConnection"]] = relationship(back_populates="workspace")
+    settings: Mapped["SpaceSettings | None"] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class WorkspaceMember(Base):
@@ -211,3 +216,20 @@ class WeeklyDigest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="weekly_digests")
+
+
+class SpaceSettings(Base):
+    __tablename__ = "space_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), unique=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_visibility: Mapped[str] = mapped_column(String(32), default="workspace_shared")
+    active_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active_focus_labels: Mapped[list] = mapped_column(JSON, default=list)
+    primary_repository_ids: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="settings")

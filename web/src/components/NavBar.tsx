@@ -3,25 +3,56 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { getUserEmail, isAuthenticated, removeToken, removeWorkspaceId } from "@/lib/auth"
+import { api, type SpaceSummary } from "@/lib/api"
+import { getSpaceId, getUserEmail, isAuthenticated, removeSpaceId, removeToken, setSpaceId } from "@/lib/auth"
 
 export default function NavBar() {
   const router = useRouter()
   const pathname = usePathname()
   const [authed, setAuthed] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
+  const [spaces, setSpaces] = useState<SpaceSummary[]>([])
+  const [currentSpaceId, setCurrentSpaceId] = useState("")
 
   useEffect(() => {
     setAuthed(isAuthenticated())
     setEmail(getUserEmail())
+    setCurrentSpaceId(getSpaceId() ?? "")
   }, [pathname])
+
+  useEffect(() => {
+    if (!authed) {
+      setSpaces([])
+      return
+    }
+
+    let cancelled = false
+    void api.getCurrentUserProfile().then((profile) => {
+      if (cancelled || !profile) return
+      setSpaces(profile.spaces)
+      if (!getSpaceId() && profile.spaces[0]) {
+        const spaceId = String(profile.spaces[0].id)
+        setSpaceId(spaceId)
+        setCurrentSpaceId(spaceId)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [authed])
 
   if (pathname === "/login") return null
 
   function handleLogout() {
     removeToken()
-    removeWorkspaceId()
+    removeSpaceId()
     router.push("/login")
+  }
+
+  function handleSpaceChange(spaceId: string) {
+    setSpaceId(spaceId)
+    setCurrentSpaceId(spaceId)
+    router.refresh()
   }
 
   return (
@@ -44,6 +75,22 @@ export default function NavBar() {
         </div>
         {authed ? (
           <div className="flex items-center gap-3">
+            {spaces.length ? (
+              <label className="flex items-center gap-2 text-sm text-stone-400">
+                <span>Space</span>
+                <select
+                  value={currentSpaceId}
+                  onChange={(event) => handleSpaceChange(event.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-sm text-stone-200"
+                >
+                  {spaces.map((space) => (
+                    <option key={space.id} value={space.id}>
+                      {space.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {email ? <span className="text-sm text-stone-500">{email}</span> : null}
             <button
               onClick={handleLogout}

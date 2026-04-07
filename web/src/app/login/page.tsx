@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { login, register } from "@/lib/api"
-import { removeWorkspaceId, setToken, setUserEmail, setWorkspaceId } from "@/lib/auth"
+import { removeSpaceId, setSpaceId, setToken, setUserEmail } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,10 +21,10 @@ export default function LoginPage() {
       const res = mode === "login" ? await login(email, password) : await register(email, password)
       setToken(res.access_token)
       setUserEmail(email)
-      if (res.default_workspace_id) {
-        setWorkspaceId(String(res.default_workspace_id))
+      if (res.default_space_id || res.default_workspace_id) {
+        setSpaceId(String(res.default_space_id ?? res.default_workspace_id))
       } else {
-        removeWorkspaceId()
+        removeSpaceId()
       }
       router.push("/")
       router.refresh()

@@ -8,10 +8,19 @@ from pydantic import BaseModel
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    default_space_id: int
     default_workspace_id: int
 
 
 class WorkspaceSummary(BaseModel):
+    id: int
+    name: str
+    slug: str
+    is_personal: bool
+    role: str
+
+
+class SpaceSummary(BaseModel):
     id: int
     name: str
     slug: str
@@ -25,4 +34,5 @@ class UserResponse(BaseModel):
     github_login: str | None
     is_active: bool
     created_at: datetime
+    spaces: list[SpaceSummary]
     workspaces: list[WorkspaceSummary]

@@ -38,10 +38,12 @@ async def get_current_user(
 async def get_current_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    space_header: int | None = Header(default=None, alias="X-Space-Id"),
     workspace_header: int | None = Header(default=None, alias="X-Workspace-Id"),
+    space_cookie: int | None = Cookie(default=None, alias="space_id"),
     workspace_cookie: int | None = Cookie(default=None, alias="workspace_id"),
 ) -> Workspace:
-    requested_workspace_id = workspace_header or workspace_cookie
+    requested_workspace_id = space_header or workspace_header or space_cookie or workspace_cookie
 
     if requested_workspace_id is not None:
         stmt = (

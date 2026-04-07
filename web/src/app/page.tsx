@@ -5,13 +5,18 @@ import { getRequestContextHeaders } from "@/lib/request-context"
 
 export default async function Home() {
   const requestHeaders = await getRequestContextHeaders()
-  const [items, digests, learningSummary] = await Promise.all([
+  const [items, digests, learningSummary, profile, currentSpace] = await Promise.all([
     api.getLearningItems({ headers: requestHeaders, query: { limit: 3 } }),
     api.getWeeklyDigests({ headers: requestHeaders }),
     api.getLearningItemsSummary({ headers: requestHeaders }),
+    api.getCurrentUserProfile({ headers: requestHeaders }),
+    api.getCurrentSpace({ headers: requestHeaders }),
   ])
+  const spaceSettings = currentSpace
+    ? await api.getSpaceSettings(currentSpace.id, { headers: requestHeaders })
+    : null
 
-  if (!items && !digests && !learningSummary) {
+  if (!items && !digests && !learningSummary && !currentSpace) {
     return (
       <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
         <h1 className="mb-3 text-3xl font-semibold text-white">PR Knowledge Hub</h1>
@@ -22,6 +27,9 @@ export default async function Home() {
 
   const latestDigest = digests?.[0] ?? null
   const latestItems = items ?? []
+  const focusLabels = spaceSettings?.active_focus_labels ?? []
+  const repeatedIssues = latestDigest?.repeated_issues ?? []
+  const nextActions = latestDigest?.next_time_notes ?? []
   const statusCounts = Object.fromEntries(
     (learningSummary?.status_counts ?? []).map((row) => [row.status, row.count]),
   )
@@ -32,17 +40,22 @@ export default async function Home() {
         <div className="grid gap-8 lg:grid-cols-[1.4fr_0.8fr]">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
-              Learning Dashboard
+              Improvement Hub
             </p>
             <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-white md:text-5xl">
-              Turn pull request feedback
+              Keep one space focused
               <br />
-              into reusable team learning.
+              on the next team improvement.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
-              Review comments, extracted learnings, and weekly digests stay connected so you can
-              spot repeat issues and close the loop on fixes.
+              Pull requests, repeated issues, active goals, and weekly review stay connected so the
+              team can move from feedback to repeatable change.
             </p>
+            <div className="mt-5 flex flex-wrap gap-3 text-sm text-stone-300">
+              <Pill label="Current Space" value={spaceSettings?.display_name ?? currentSpace?.name ?? "Personal Space"} />
+              <Pill label="Spaces" value={String(profile?.spaces.length ?? 0)} />
+              <Pill label="Default Visibility" value={spaceSettings?.default_visibility ?? "workspace_shared"} />
+            </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/learning-items"
@@ -73,7 +86,7 @@ export default async function Home() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-white">Latest Learning Items</h2>
-              <p className="text-sm text-stone-400">Most recent extracted signals from PR reviews</p>
+              <p className="text-sm text-stone-400">Recent review signals inside the current space</p>
             </div>
             <Link href="/learning-items" className="text-sm text-amber-300 hover:text-amber-200">
               View all
@@ -120,19 +133,21 @@ export default async function Home() {
 
         <div className="space-y-6">
           <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
-            <h2 className="mb-4 text-xl font-semibold text-white">Status Snapshot</h2>
-            <div className="space-y-3">
-              {["new", "in_progress", "applied", "ignored"].map((status) => (
-                <div key={status} className="rounded-2xl border border-white/10 bg-black/10 p-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-stone-200">
-                      {LEARNING_STATUS_LABELS[status]}
-                    </span>
-                    <span className="font-mono text-stone-400">{statusCounts[status] ?? 0}</span>
-                  </div>
-                </div>
-              ))}
+            <h2 className="mb-4 text-xl font-semibold text-white">Active Goal</h2>
+            <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+              <p className="text-sm leading-6 text-stone-300">
+                {spaceSettings?.active_goal ?? "No active goal yet. Add one in space settings to guide the next cycle."}
+              </p>
             </div>
+            {focusLabels.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {focusLabels.map((label) => (
+                  <span key={label} className="rounded-full bg-white/10 px-3 py-1 text-xs text-stone-200">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           {latestDigest ? (
@@ -157,6 +172,52 @@ export default async function Home() {
               </Link>
             </section>
           ) : null}
+
+          <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <h2 className="mb-4 text-xl font-semibold text-white">Repeated Issues</h2>
+            {repeatedIssues.length ? (
+              <div className="space-y-3">
+                {repeatedIssues.map((issue) => (
+                  <div key={issue} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                    <p className="text-sm text-stone-200">{issue}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-stone-400">No repeated issues highlighted yet.</p>
+            )}
+          </section>
+
+          <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <h2 className="mb-4 text-xl font-semibold text-white">Next Actions</h2>
+            {nextActions.length ? (
+              <div className="space-y-3">
+                {nextActions.map((action) => (
+                  <div key={action} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                    <p className="text-sm text-stone-200">{action}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-stone-400">No next actions captured yet.</p>
+            )}
+          </section>
+
+          <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <h2 className="mb-4 text-xl font-semibold text-white">Status Snapshot</h2>
+            <div className="space-y-3">
+              {["new", "in_progress", "applied", "ignored"].map((status) => (
+                <div key={status} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-stone-200">
+                      {LEARNING_STATUS_LABELS[status]}
+                    </span>
+                    <span className="font-mono text-stone-400">{statusCounts[status] ?? 0}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
             <h2 className="mb-4 text-xl font-semibold text-white">Top Categories</h2>
@@ -187,5 +248,13 @@ function StatCard({ label, value }: { label: string; value: number }) {
       <p className="mb-1 text-sm text-stone-400">{label}</p>
       <p className="text-3xl font-semibold text-white">{value}</p>
     </div>
+  )
+}
+
+function Pill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-2 text-xs uppercase tracking-[0.18em]">
+      {label}: {value}
+    </span>
   )
 }

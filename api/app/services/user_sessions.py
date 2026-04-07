@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
-from app.schemas.auth import TokenResponse, UserResponse, WorkspaceSummary
+from app.schemas.auth import SpaceSummary, TokenResponse, UserResponse, WorkspaceSummary
 from app.services.auth import create_access_token, hash_password, verify_password
 from app.services.workspaces import ensure_personal_workspace, list_user_workspaces
 
@@ -23,6 +23,7 @@ async def build_token_response(db: AsyncSession, user: User) -> TokenResponse:
     await db.refresh(workspace)
     return TokenResponse(
         access_token=create_access_token(user.id, user.email),
+        default_space_id=workspace.id,
         default_workspace_id=workspace.id,
     )
 
@@ -66,11 +67,22 @@ async def load_workspace_summaries(db: AsyncSession, user_id: int) -> list[Works
 
 
 async def get_user_profile(db: AsyncSession, user: User) -> UserResponse:
+    workspace_summaries = await load_workspace_summaries(db, user.id)
     return UserResponse(
         id=user.id,
         email=user.email,
         github_login=user.github_login,
         is_active=user.is_active,
         created_at=user.created_at,
-        workspaces=await load_workspace_summaries(db, user.id),
+        spaces=[
+            SpaceSummary(
+                id=workspace.id,
+                name=workspace.name,
+                slug=workspace.slug,
+                is_personal=workspace.is_personal,
+                role=workspace.role,
+            )
+            for workspace in workspace_summaries
+        ],
+        workspaces=workspace_summaries,
     )

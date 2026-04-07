@@ -40,6 +40,7 @@ async def test_register_creates_personal_workspace(db_session, monkeypatch):
     monkeypatch.setattr(settings, "secret_key", "test-secret", raising=False)
 
     response = await register_user(db_session, "alice@example.com", "pw-123456")
+    assert response.default_space_id == response.default_workspace_id
     payload = decode_access_token(response.access_token)
     user = await db_session.get(User, int(payload["sub"]))
     assert user is not None
@@ -65,6 +66,7 @@ async def test_login_reuses_default_workspace(db_session, monkeypatch):
     created = await register_user(db_session, "bob@example.com", "pw-123456")
     logged_in = await login_user(db_session, "bob@example.com", "pw-123456")
 
+    assert logged_in.default_space_id == created.default_space_id
     assert logged_in.default_workspace_id == created.default_workspace_id
 
 
@@ -79,6 +81,9 @@ async def test_me_includes_workspace_memberships(db_session, monkeypatch):
     profile = await get_user_profile(db_session, user)
 
     assert profile.email == "carol@example.com"
+    assert len(profile.spaces) == 1
+    assert profile.spaces[0].is_personal is True
+    assert profile.spaces[0].role == "owner"
     assert len(profile.workspaces) == 1
     assert profile.workspaces[0].is_personal is True
     assert profile.workspaces[0].role == "owner"
@@ -119,6 +124,7 @@ async def test_complete_github_login_creates_user_and_workspace(db_session, monk
     monkeypatch.setattr("app.services.github_oauth.httpx.AsyncClient", FakeClient)
 
     response = await complete_github_login(db_session, "auth-code")
+    assert response.default_space_id == response.default_workspace_id
     payload = decode_access_token(response.access_token)
     user = await db_session.get(User, int(payload["sub"]))
 

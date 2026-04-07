@@ -1,6 +1,8 @@
 export const TOKEN_KEY = "auth_token"
+export const SPACE_KEY = "space_id"
 export const WORKSPACE_KEY = "workspace_id"
 export const TOKEN_COOKIE = "token"
+export const SPACE_COOKIE = "space_id"
 export const WORKSPACE_COOKIE = "workspace_id"
 export const EMAIL_KEY = "auth_email"
 
@@ -51,19 +53,40 @@ export function removeToken(): void {
 }
 
 export function getWorkspaceId(): string | null {
-  if (typeof window === "undefined") return null
-  return readCookie(WORKSPACE_COOKIE) ?? localStorage.getItem(WORKSPACE_KEY)
+  return getSpaceId()
 }
 
 export function setWorkspaceId(workspaceId: string): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(WORKSPACE_KEY, workspaceId)
-  writeCookie(WORKSPACE_COOKIE, workspaceId)
+  setSpaceId(workspaceId)
 }
 
 export function removeWorkspaceId(): void {
+  removeSpaceId()
+}
+
+export function getSpaceId(): string | null {
+  if (typeof window === "undefined") return null
+  return (
+    readCookie(SPACE_COOKIE) ??
+    readCookie(WORKSPACE_COOKIE) ??
+    localStorage.getItem(SPACE_KEY) ??
+    localStorage.getItem(WORKSPACE_KEY)
+  )
+}
+
+export function setSpaceId(spaceId: string): void {
   if (typeof window === "undefined") return
+  localStorage.setItem(SPACE_KEY, spaceId)
+  localStorage.setItem(WORKSPACE_KEY, spaceId)
+  writeCookie(SPACE_COOKIE, spaceId)
+  writeCookie(WORKSPACE_COOKIE, spaceId)
+}
+
+export function removeSpaceId(): void {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(SPACE_KEY)
   localStorage.removeItem(WORKSPACE_KEY)
+  clearCookie(SPACE_COOKIE)
   clearCookie(WORKSPACE_COOKIE)
 }
 
@@ -74,10 +97,13 @@ export function isAuthenticated(): boolean {
 export function getClientRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {}
   const token = readCookie(TOKEN_COOKIE) ?? getToken()
-  const workspaceId = readCookie(WORKSPACE_COOKIE) ?? getWorkspaceId()
+  const spaceId = getSpaceId()
 
   if (token) headers.Authorization = `Bearer ${token}`
-  if (workspaceId) headers["X-Workspace-Id"] = workspaceId
+  if (spaceId) {
+    headers["X-Space-Id"] = spaceId
+    headers["X-Workspace-Id"] = spaceId
+  }
 
   return headers
 }

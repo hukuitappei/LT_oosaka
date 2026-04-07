@@ -5,7 +5,29 @@ const port = Number(process.env.MOCK_API_PORT || 4100)
 const tokenResponse = {
   access_token: "e2e-token",
   token_type: "bearer",
+  default_space_id: 1,
   default_workspace_id: 1,
+}
+
+const spaces = [
+  {
+    id: 1,
+    name: "Demo Personal Space",
+    slug: "demo-personal-space",
+    is_personal: true,
+    role: "owner",
+    created_at: "2026-03-27T00:00:00Z",
+  },
+]
+
+const spaceSettings = {
+  workspace_id: 1,
+  display_name: "Demo Personal Space",
+  description: "A space for validation improvements.",
+  default_visibility: "workspace_shared",
+  active_goal: "Stop repeated validation issues before review.",
+  active_focus_labels: ["validation", "api-boundary"],
+  primary_repository_ids: [10],
 }
 
 const repositories = [
@@ -48,6 +70,7 @@ const learningItems = [
 const weeklyDigests = [
   {
     id: 1,
+    space_id: 1,
     workspace_id: 1,
     year: 2026,
     week: 13,
@@ -98,6 +121,12 @@ const pullRequestDetails = {
         },
         matched_terms: ["persistence", "validation"],
         same_repository: true,
+        relevance_score: 11,
+        recommendation_reasons: [
+          "Same repository context",
+          "Matches the current learning category",
+          "Previously marked as applied",
+        ],
       },
     ],
   },
@@ -166,6 +195,30 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/auth/login") {
     return sendJson(res, 200, tokenResponse)
+  }
+
+  if (req.method === "GET" && url.pathname === "/auth/me") {
+    return sendJson(res, 200, {
+      id: 1,
+      email: "e2e@example.com",
+      github_login: null,
+      is_active: true,
+      created_at: "2026-03-27T00:00:00Z",
+      spaces,
+      workspaces: spaces,
+    })
+  }
+
+  if (req.method === "GET" && url.pathname === "/spaces/") {
+    return sendJson(res, 200, spaces)
+  }
+
+  if (req.method === "GET" && url.pathname === "/spaces/current/context") {
+    return sendJson(res, 200, spaces[0])
+  }
+
+  if (req.method === "GET" && url.pathname === "/spaces/1/settings") {
+    return sendJson(res, 200, spaceSettings)
   }
 
   if (req.method === "GET" && url.pathname === "/learning-items/summary") {

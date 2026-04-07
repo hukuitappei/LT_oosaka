@@ -44,6 +44,7 @@ async def test_auth_workspace_learning_items_and_digests_flow(db_session, monkey
         )
         assert register_response.status_code == 201
         register_payload = register_response.json()
+        assert register_payload["default_space_id"] == register_payload["default_workspace_id"]
         workspace_id = register_payload["default_workspace_id"]
         token = register_payload["access_token"]
 
@@ -54,6 +55,7 @@ async def test_auth_workspace_learning_items_and_digests_flow(db_session, monkey
         )
         assert login_response.status_code == 200
         login_payload = login_response.json()
+        assert login_payload["default_space_id"] == workspace_id
         assert login_payload["default_workspace_id"] == workspace_id
 
         workspace = await db_session.get(Workspace, workspace_id)
@@ -120,6 +122,13 @@ async def test_auth_workspace_learning_items_and_digests_flow(db_session, monkey
         workspace_response = await client.get("/workspaces/current/context", headers=auth_headers)
         assert workspace_response.status_code == 200
         assert workspace_response.json()["id"] == workspace_id
+
+        space_response = await client.get(
+            "/spaces/current/context",
+            headers={"Authorization": f"Bearer {token}", "X-Space-Id": str(workspace_id)},
+        )
+        assert space_response.status_code == 200
+        assert space_response.json()["id"] == workspace_id
 
         items_response = await client.get("/learning-items/", headers=auth_headers)
         assert items_response.status_code == 200

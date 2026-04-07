@@ -1,5 +1,5 @@
 import { cookies } from "next/headers"
-import { TOKEN_COOKIE, WORKSPACE_COOKIE } from "@/lib/auth"
+import { SPACE_COOKIE, TOKEN_COOKIE, WORKSPACE_COOKIE } from "@/lib/auth"
 
 export async function getRequestContextHeaders(extra?: HeadersInit): Promise<Headers> {
   const headers = new Headers(extra)
@@ -10,9 +10,12 @@ export async function getRequestContextHeaders(extra?: HeadersInit): Promise<Hea
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const workspaceId = cookieStore.get(WORKSPACE_COOKIE)?.value
-  if (workspaceId && !headers.has("X-Workspace-Id")) {
-    headers.set("X-Workspace-Id", workspaceId)
+  const spaceId = cookieStore.get(SPACE_COOKIE)?.value ?? cookieStore.get(WORKSPACE_COOKIE)?.value
+  if (spaceId && !headers.has("X-Space-Id")) {
+    headers.set("X-Space-Id", spaceId)
+  }
+  if (spaceId && !headers.has("X-Workspace-Id")) {
+    headers.set("X-Workspace-Id", spaceId)
   }
 
   return headers

@@ -39,6 +39,8 @@ test("redirects anonymous users and renders authenticated pages with seeded auth
   await expect(page).toHaveURL(/\/pull-requests\/42$/)
   await expect(page.getByText("Before You Repeat This")).toBeVisible()
   await expect(page.getByText("Validate before persistence").first()).toBeVisible()
+  await expect(page.getByText("Priority 11")).toBeVisible()
+  await expect(page.getByText("Same repository context")).toBeVisible()
 
   await page.getByRole("navigation").getByRole("link", { name: "Weekly Digests" }).click()
   await expect(page).toHaveURL(/\/weekly-digests$/)

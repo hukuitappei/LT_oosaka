@@ -65,7 +65,7 @@ async def test_github_callback_maps_token_exchange_error_to_400(monkeypatch):
 @pytest.mark.asyncio
 async def test_me_returns_profile_from_service(monkeypatch):
     from app.routers import auth as routes
-    from app.schemas.auth import UserResponse, WorkspaceSummary
+    from app.schemas.auth import SpaceSummary, UserResponse, WorkspaceSummary
 
     profile = UserResponse(
         id=1,
@@ -73,6 +73,9 @@ async def test_me_returns_profile_from_service(monkeypatch):
         github_login="octocat",
         is_active=True,
         created_at="2026-03-27T00:00:00",
+        spaces=[
+            SpaceSummary(id=3, name="Alpha", slug="alpha", is_personal=False, role="admin"),
+        ],
         workspaces=[
             WorkspaceSummary(id=3, name="Alpha", slug="alpha", is_personal=False, role="admin"),
         ],
@@ -82,4 +85,5 @@ async def test_me_returns_profile_from_service(monkeypatch):
     response = await routes.me(current_user=SimpleNamespace(), db=SimpleNamespace())
 
     assert response.email == "alice@example.com"
+    assert response.spaces[0].slug == "alpha"
     assert response.workspaces[0].slug == "alpha"

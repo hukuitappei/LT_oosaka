@@ -13,6 +13,7 @@ from app.routers.health import router as health_router
 from app.routers.learning_items import router as learning_items_router
 from app.routers.pull_requests import router as pull_requests_router
 from app.routers.repositories import router as repositories_router
+from app.routers.spaces import router as spaces_router
 from app.routers.weekly_digests import router as weekly_digests_router
 from app.routers.webhook import router as webhook_router
 from app.routers.workspaces import router as workspaces_router
@@ -39,6 +40,7 @@ def create_app(*, include_analyze_router: bool = False) -> FastAPI:
     )
 
     app.include_router(auth_router)
+    app.include_router(spaces_router)
     app.include_router(workspaces_router)
     app.include_router(github_connections_router)
     app.include_router(health_router)
