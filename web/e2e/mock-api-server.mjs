@@ -149,6 +149,17 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, tokenResponse)
   }
 
+  if (req.method === "POST" && url.pathname === "/auth/register") {
+    const body = await readJsonBody(req)
+    if (!body.email || !body.password) {
+      return sendJson(res, 422, { detail: "Email and password required" })
+    }
+    if (body.email === "taken@example.com") {
+      return sendJson(res, 409, { detail: "Email already registered" })
+    }
+    return sendJson(res, 200, tokenResponse)
+  }
+
   if (req.method === "GET" && url.pathname === "/learning-items/") {
     if (isEmptyWorkspaceRequest(req)) {
       return sendJson(res, 200, [])

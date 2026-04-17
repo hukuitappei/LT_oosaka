@@ -1,7 +1,6 @@
 from fastapi import APIRouter
-import httpx
-import aiosqlite
 from app.config import settings
+from app.services.health import check_db_health, check_llm_health
 
 router = APIRouter()
 
@@ -10,25 +9,11 @@ router = APIRouter()
 async def health_check():
     result = {"status": "ok", "db": "unknown", "llm": "unknown"}
 
-    # DB check (SQLite)
-    try:
-        db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
-        async with aiosqlite.connect(db_path) as db:
-            await db.execute("SELECT 1")
-        result["db"] = "ok"
-    except Exception as e:
-        result["db"] = f"error: {str(e)}"
+    db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
+    result["db"] = await check_db_health(db_path)
+    if result["db"] != "ok":
         result["status"] = "degraded"
 
-    # Ollama check
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.ollama_base_url}/api/tags")
-            if resp.status_code == 200:
-                result["llm"] = "ok"
-            else:
-                result["llm"] = f"http {resp.status_code}"
-    except Exception:
-        result["llm"] = "not running"
+    result["llm"] = await check_llm_health(settings.ollama_base_url)
 
     return result

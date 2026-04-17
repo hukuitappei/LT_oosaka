@@ -123,14 +123,19 @@ def extract_pr_task(self, payload: dict) -> dict:
         )
         return result
     except Exception as exc:
-        logger.exception(
-            "extract_pr_task failed attempt=%d action=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s, retrying...",
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "extract_pr_task failed attempt=%d/%d final=%s action=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s",
             retries + 1,
+            self.max_retries,
+            is_final,
             context["action"],
             context["repo"],
             context["pr_number"],
             context["installation_id"],
             context["correlation_id"],
+            exc_info=True,
         )
         raise self.retry(exc=exc)
 
@@ -210,15 +215,20 @@ def extract_learning_items_task(self, extraction_request: dict) -> dict:
         )
         return result
     except Exception as exc:
-        logger.exception(
-            "extract_learning_items_task failed attempt=%d workspace_id=%s pr_id=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s, retrying...",
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "extract_learning_items_task failed attempt=%d/%d final=%s workspace_id=%s pr_id=%s repo=%s pr_number=%s installation_id=%s correlation_id=%s",
             retries + 1,
+            self.max_retries,
+            is_final,
             context["workspace_id"],
             context["pr_id"],
             context["repo"],
             context["pr_number"],
             context["installation_id"],
             context["correlation_id"],
+            exc_info=True,
         )
         raise self.retry(exc=exc)
 
@@ -292,12 +302,17 @@ def reanalyze_pr_task(
         )
         return result
     except Exception as exc:
-        logger.exception(
-            "reanalyze_pr_task failed attempt=%d pr_id=%d workspace_id=%d user_id=%d, retrying...",
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "reanalyze_pr_task failed attempt=%d/%d final=%s pr_id=%d workspace_id=%d user_id=%d",
             retries + 1,
+            self.max_retries,
+            is_final,
             pr_id,
             workspace_id,
             user_id,
+            exc_info=True,
         )
         raise self.retry(exc=exc)
 
@@ -406,12 +421,17 @@ def generate_digest_task(
         )
         return result
     except Exception as exc:
-        logger.exception(
-            "generate_digest_task failed attempt=%d year=%d week=%d workspace_id=%d, retrying...",
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "generate_digest_task failed attempt=%d/%d final=%s year=%d week=%d workspace_id=%d",
             retries + 1,
+            self.max_retries,
+            is_final,
             year,
             week,
             workspace_id,
+            exc_info=True,
         )
         raise self.retry(exc=exc)
 
@@ -455,9 +475,14 @@ def generate_scheduled_weekly_digests_task(self) -> dict:
         )
         return result
     except Exception as exc:
-        logger.exception(
-            "generate_scheduled_weekly_digests_task failed attempt=%d, retrying...",
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "generate_scheduled_weekly_digests_task failed attempt=%d/%d final=%s",
             retries + 1,
+            self.max_retries,
+            is_final,
+            exc_info=True,
         )
         raise self.retry(exc=exc)
 
@@ -484,7 +509,15 @@ def cleanup_retention_task(self) -> dict:
         )
         return result
     except Exception as exc:
-        logger.exception("cleanup_retention_task failed attempt=%d, retrying...", retries + 1)
+        is_final = retries + 1 >= self.max_retries
+        log = logger.error if is_final else logger.warning
+        log(
+            "cleanup_retention_task failed attempt=%d/%d final=%s",
+            retries + 1,
+            self.max_retries,
+            is_final,
+            exc_info=True,
+        )
         raise self.retry(exc=exc)
 
 
