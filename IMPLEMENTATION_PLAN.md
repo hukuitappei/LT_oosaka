@@ -203,6 +203,23 @@ Expected result:
 3. Tighten GitHub connection flows and repository synchronization UX.
 4. Expose related learning suggestions earlier in the workflow, not only from the PR detail page.
 
+### External-Environment Dependent Work
+
+These items require real external systems or deployment settings and should be tracked separately from local-only completion:
+
+1. Verify GitHub OAuth end-to-end with real client credentials and callback routing.
+2. Verify GitHub App installation linking against a real GitHub App, including repository visibility and permission scopes.
+3. Verify repository synchronization UX against real GitHub repositories, including revoked installations and empty-state handling.
+4. Verify webhook delivery, signature validation, and Celery-triggered processing from live GitHub events.
+5. Verify deployment-time runtime configuration for `API_URL`, auth cookies, and reverse proxy behavior.
+
+### External Verification Plan
+
+1. Prepare a staging checklist with required secrets, callback URLs, installation IDs, and test repositories.
+2. Run OAuth, GitHub App linking, and repository sync scenarios in staging.
+3. Capture integration failures and feed them back into router/service/UI contracts.
+4. Update README or ops notes after the staging verification pass.
+
 ### Low Priority
 
 1. Expand integrations beyond PR review comments.

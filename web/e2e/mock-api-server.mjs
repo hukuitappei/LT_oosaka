@@ -9,6 +9,8 @@ const tokenResponse = {
   default_workspace_id: 1,
 }
 
+const emptyWorkspaceToken = "e2e-empty"
+
 const spaces = [
   {
     id: 1,
@@ -75,7 +77,7 @@ const weeklyDigests = [
     year: 2026,
     week: 13,
     summary: "Validation and API boundary handling improved.",
-    repeated_issues: [],
+    repeated_issues: ["Validation checks were missing at the request boundary."],
     next_time_notes: ["Keep boundary validation early."],
     pr_count: 1,
     learning_count: 1,
@@ -137,6 +139,49 @@ const pullRequestDetails = {
       },
     ],
   },
+}
+
+let nextGitHubConnectionId = 3
+const githubConnections = [
+  {
+    id: 1,
+    provider_type: "token",
+    workspace_id: 1,
+    user_id: 1,
+    installation_id: null,
+    github_account_login: "octocat",
+    label: "Personal token",
+    is_active: true,
+    created_at: "2026-03-27T00:00:00Z",
+  },
+  {
+    id: 2,
+    provider_type: "app",
+    workspace_id: 1,
+    user_id: 1,
+    installation_id: 123456,
+    github_account_login: "octocat",
+    label: "GitHub App",
+    is_active: true,
+    created_at: "2026-03-27T00:00:00Z",
+  },
+]
+
+async function readJsonBody(req) {
+  const chunks = []
+  for await (const chunk of req) {
+    chunks.push(chunk)
+  }
+  const raw = Buffer.concat(chunks).toString("utf8")
+  return raw ? JSON.parse(raw) : {}
+}
+
+async function readTextBody(req) {
+  const chunks = []
+  for await (const chunk of req) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks).toString("utf8")
 }
 
 function sendJson(res, statusCode, payload) {
@@ -203,7 +248,19 @@ function summarizeLearningItems() {
   }
 }
 
-const server = http.createServer((req, res) => {
+function getBearerToken(req) {
+  const header = req.headers.authorization ?? ""
+  if (!header.startsWith("Bearer ")) {
+    return ""
+  }
+  return header.slice("Bearer ".length)
+}
+
+function isEmptyWorkspaceRequest(req) {
+  return getBearerToken(req) === emptyWorkspaceToken
+}
+
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host}`)
 
   if (req.method === "GET" && url.pathname === "/health") {
@@ -211,6 +268,24 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/auth/login") {
+    const body = await readTextBody(req)
+    const form = new URLSearchParams(body)
+    const username = form.get("username") ?? ""
+    const password = form.get("password") ?? ""
+    if (username === "fail@example.com" || password === "wrong-password") {
+      return sendJson(res, 401, { detail: "Invalid credentials" })
+    }
+    return sendJson(res, 200, tokenResponse)
+  }
+
+  if (req.method === "POST" && url.pathname === "/auth/register") {
+    const body = await readJsonBody(req)
+    if (!body.email || !body.password) {
+      return sendJson(res, 422, { detail: "Email and password required" })
+    }
+    if (body.email === "taken@example.com") {
+      return sendJson(res, 409, { detail: "Email already registered" })
+    }
     return sendJson(res, 200, tokenResponse)
   }
 
@@ -239,27 +314,38 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/learning-items/summary") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, {
+        total_learning_items: 0,
+        current_week_count: 0,
+        total_reuse_events: 0,
+        reused_learning_items_count: 0,
+        current_week_reuse_count: 0,
+        recurring_reuse_events: 0,
+        clean_reuse_events: 0,
+        weekly_points: [],
+        reuse_weekly_points: [],
+        top_categories: [],
+        status_counts: [],
+      })
+    }
     return sendJson(res, 200, summarizeLearningItems())
   }
 
   if (req.method === "GET" && url.pathname === "/learning-items/") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, [])
+    }
     return sendJson(res, 200, filterLearningItems(url))
   }
 
   if (req.method === "PATCH" && url.pathname === "/learning-items/1") {
-    let body = ""
-    req.on("data", (chunk) => {
-      body += chunk
-    })
-    req.on("end", () => {
-      const payload = body ? JSON.parse(body) : {}
-      learningItems[0] = {
-        ...learningItems[0],
-        ...payload,
-      }
-      sendJson(res, 200, learningItems[0])
-    })
-    return
+    const payload = await readJsonBody(req)
+    learningItems[0] = {
+      ...learningItems[0],
+      ...payload,
+    }
+    return sendJson(res, 200, learningItems[0])
   }
 
   if (req.method === "GET" && url.pathname === "/repositories/") {
@@ -267,10 +353,16 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 200, [])
+    }
     return sendJson(res, 200, weeklyDigests)
   }
 
   if (req.method === "GET" && url.pathname === "/weekly-digests/1") {
+    if (isEmptyWorkspaceRequest(req)) {
+      return sendJson(res, 404, { detail: "Not found" })
+    }
     return sendJson(res, 200, weeklyDigests[0])
   }
 
@@ -292,11 +384,71 @@ const server = http.createServer((req, res) => {
     })
   }
 
+  if (req.method === "GET" && url.pathname === "/github-connections/") {
+    return sendJson(res, 200, githubConnections)
+  }
+
+  if (req.method === "POST" && url.pathname === "/github-connections/token") {
+    const body = await readJsonBody(req)
+    const connection = {
+      id: nextGitHubConnectionId++,
+      provider_type: "token",
+      workspace_id: 1,
+      user_id: 1,
+      installation_id: null,
+      github_account_login: body.github_account_login ?? null,
+      label: body.label ?? null,
+      is_active: true,
+      created_at: "2026-03-30T00:00:00Z",
+    }
+    githubConnections.unshift(connection)
+    return sendJson(res, 201, connection)
+  }
+
+  if (req.method === "POST" && url.pathname === "/github-connections/app/link") {
+    const body = await readJsonBody(req)
+    const existing = githubConnections.find(
+      (connection) =>
+        connection.provider_type === "app" &&
+        connection.installation_id === body.installation_id &&
+        connection.workspace_id === 1,
+    )
+    if (existing) {
+      existing.github_account_login = body.github_account_login ?? existing.github_account_login
+      existing.label = body.label ?? existing.label
+      existing.is_active = true
+      return sendJson(res, 201, existing)
+    }
+    const connection = {
+      id: nextGitHubConnectionId++,
+      provider_type: "app",
+      workspace_id: 1,
+      user_id: 1,
+      installation_id: body.installation_id,
+      github_account_login: body.github_account_login ?? null,
+      label: body.label ?? null,
+      is_active: true,
+      created_at: "2026-03-30T00:00:00Z",
+    }
+    githubConnections.unshift(connection)
+    return sendJson(res, 201, connection)
+  }
+
+  if (req.method === "DELETE" && url.pathname.startsWith("/github-connections/")) {
+    const connectionId = Number(url.pathname.split("/").pop())
+    const index = githubConnections.findIndex((connection) => connection.id === connectionId)
+    if (index === -1) {
+      return sendJson(res, 404, { detail: "Connection not found" })
+    }
+    githubConnections.splice(index, 1)
+    return sendJson(res, 200, { status: "deleted" })
+  }
+
   return sendJson(res, 404, { detail: "Not found" })
 })
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Mock API listening on http://127.0.0.1:${port}`)
+server.listen(port, "localhost", () => {
+  console.log(`Mock API listening on http://localhost:${port}`)
 })
 
 function shutdown() {

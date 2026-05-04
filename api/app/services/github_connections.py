@@ -3,40 +3,147 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import GitHubConnection, Workspace
-from app.services.workspaces import WorkspaceNotFoundError, get_workspace_by_id
+from app.db.models import GitHubConnection, Workspace, WorkspaceMember
+from app.services.connection_secrets import decrypt_github_connection_token, encrypt_github_connection_token
 
 
 class GitHubConnectionNotFoundError(Exception):
     pass
 
 
-async def resolve_workspace_for_connection(
-    db: AsyncSession,
-    *,
-    workspace_id: int | None,
-    fallback_workspace_id: int,
-) -> Workspace:
-    target_workspace_id = fallback_workspace_id if workspace_id is None else workspace_id
-    return await get_workspace_by_id(db, target_workspace_id)
+class GitHubConnectionWorkspaceNotFoundError(Exception):
+    pass
 
 
-async def list_user_github_connections(
+class GitHubConnectionWorkspacePermissionError(Exception):
+    pass
+
+
+class GitHubConnectionWorkspaceDeletePermissionError(Exception):
+    pass
+
+
+async def require_github_connection_admin_workspace(
     db: AsyncSession,
     *,
-    current_user_id: int,
+    requested_workspace_id: int | None,
     current_workspace_id: int,
+    user_id: int,
+    permission_error_cls: type[Exception] = GitHubConnectionWorkspacePermissionError,
+) -> Workspace:
+    workspace_id = current_workspace_id if requested_workspace_id is None else requested_workspace_id
+    row = await db.execute(
+        select(Workspace, WorkspaceMember.role)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(
+            Workspace.id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    result = row.first()
+    if result is None:
+        workspace = await db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise GitHubConnectionWorkspaceNotFoundError
+        raise permission_error_cls
+
+    workspace, role = result
+    if role not in {"owner", "admin"}:
+        raise permission_error_cls
+    return workspace
+
+
+async def get_visible_github_connection(
+    db: AsyncSession,
+    *,
+    connection_id: int,
+    workspace_id: int,
+    user_id: int,
+) -> GitHubConnection:
+    connection = await db.get(GitHubConnection, connection_id)
+    if connection is None:
+        raise GitHubConnectionNotFoundError
+    if connection.workspace_id is not None and connection.workspace_id != workspace_id:
+        raise GitHubConnectionNotFoundError
+    if connection.workspace_id is None and connection.user_id != user_id:
+        raise GitHubConnectionNotFoundError
+    return connection
+
+
+async def list_visible_github_connections(
+    db: AsyncSession,
+    *,
+    workspace_id: int,
+    user_id: int,
 ) -> list[GitHubConnection]:
     result = await db.execute(
         select(GitHubConnection).where(
-            (GitHubConnection.workspace_id == current_workspace_id)
+            (GitHubConnection.workspace_id == workspace_id)
             | (
-                (GitHubConnection.user_id == current_user_id)
+                (GitHubConnection.user_id == user_id)
                 & GitHubConnection.workspace_id.is_(None)
             )
         )
     )
-    return list(result.scalars().all())
+    return result.scalars().all()
+
+
+async def get_visible_github_connection_access_token(
+    db: AsyncSession,
+    *,
+    connection_id: int,
+    workspace_id: int,
+    user_id: int,
+) -> str | None:
+    connection = await get_visible_github_connection(
+        db,
+        connection_id=connection_id,
+        workspace_id=workspace_id,
+        user_id=user_id,
+    )
+    return decrypt_github_connection_token(connection.access_token)
+
+
+async def resolve_github_connection_workspace(
+    db: AsyncSession,
+    *,
+    requested_workspace_id: int | None,
+    current_workspace_id: int,
+    user_id: int,
+) -> Workspace:
+    return await require_github_connection_admin_workspace(
+        db,
+        requested_workspace_id=requested_workspace_id,
+        current_workspace_id=current_workspace_id,
+        user_id=user_id,
+        permission_error_cls=GitHubConnectionWorkspacePermissionError,
+    )
+
+
+async def create_token_github_connection_for_workspace_context(
+    db: AsyncSession,
+    *,
+    requested_workspace_id: int | None,
+    current_workspace_id: int,
+    user_id: int,
+    access_token: str,
+    github_account_login: str | None = None,
+    label: str | None = None,
+) -> GitHubConnection:
+    workspace = await resolve_github_connection_workspace(
+        db,
+        requested_workspace_id=requested_workspace_id,
+        current_workspace_id=current_workspace_id,
+        user_id=user_id,
+    )
+    return await create_token_github_connection(
+        db,
+        workspace_id=workspace.id,
+        user_id=user_id,
+        access_token=access_token,
+        github_account_login=github_account_login,
+        label=label,
+    )
 
 
 async def create_token_github_connection(
@@ -45,14 +152,14 @@ async def create_token_github_connection(
     workspace_id: int,
     user_id: int,
     access_token: str,
-    github_account_login: str | None,
-    label: str | None,
+    github_account_login: str | None = None,
+    label: str | None = None,
 ) -> GitHubConnection:
     connection = GitHubConnection(
         provider_type="token",
         workspace_id=workspace_id,
         user_id=user_id,
-        access_token=access_token,
+        access_token=encrypt_github_connection_token(access_token),
         github_account_login=github_account_login,
         label=label,
     )
@@ -62,14 +169,40 @@ async def create_token_github_connection(
     return connection
 
 
+async def link_app_github_connection_for_workspace_context(
+    db: AsyncSession,
+    *,
+    requested_workspace_id: int | None,
+    current_workspace_id: int,
+    user_id: int,
+    installation_id: int,
+    github_account_login: str | None = None,
+    label: str | None = None,
+) -> GitHubConnection:
+    workspace = await resolve_github_connection_workspace(
+        db,
+        requested_workspace_id=requested_workspace_id,
+        current_workspace_id=current_workspace_id,
+        user_id=user_id,
+    )
+    return await link_app_github_connection(
+        db,
+        workspace_id=workspace.id,
+        user_id=user_id,
+        installation_id=installation_id,
+        github_account_login=github_account_login,
+        label=label,
+    )
+
+
 async def link_app_github_connection(
     db: AsyncSession,
     *,
     workspace_id: int,
     user_id: int,
     installation_id: int,
-    github_account_login: str | None,
-    label: str | None,
+    github_account_login: str | None = None,
+    label: str | None = None,
 ) -> GitHubConnection:
     existing = await db.scalar(
         select(GitHubConnection).where(
@@ -93,26 +226,31 @@ async def link_app_github_connection(
             label=label,
         )
         db.add(connection)
-
     await db.commit()
     await db.refresh(connection)
     return connection
 
 
-async def delete_accessible_github_connection(
+async def delete_visible_github_connection(
     db: AsyncSession,
     *,
     connection_id: int,
-    current_user_id: int,
-    current_workspace_id: int,
+    workspace_id: int,
+    user_id: int,
 ) -> None:
-    connection = await db.get(GitHubConnection, connection_id)
-    if connection is None:
-        raise GitHubConnectionNotFoundError
-    if connection.workspace_id is not None and connection.workspace_id != current_workspace_id:
-        raise GitHubConnectionNotFoundError
-    if connection.workspace_id is None and connection.user_id != current_user_id:
-        raise GitHubConnectionNotFoundError
-
+    connection = await get_visible_github_connection(
+        db,
+        connection_id=connection_id,
+        workspace_id=workspace_id,
+        user_id=user_id,
+    )
+    if connection.workspace_id is not None:
+        await require_github_connection_admin_workspace(
+            db,
+            requested_workspace_id=connection.workspace_id,
+            current_workspace_id=workspace_id,
+            user_id=user_id,
+            permission_error_cls=GitHubConnectionWorkspaceDeletePermissionError,
+        )
     await db.delete(connection)
     await db.commit()

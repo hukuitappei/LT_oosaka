@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     github_oauth_client_id: str = ""
     github_oauth_client_secret: str = ""
     github_oauth_redirect_uri: str = "http://localhost:8000/auth/github/callback"
+    github_connection_token_encryption_key: str = ""
+    pr_retention_days: int = 90
+    log_retention_days: int = 30
+    learning_retention_days: int = 365
+    digest_retention_days: int = 365
+    loki_push_url: str = ""
+    loki_username: str = ""
+    loki_password: str = ""
+    loki_tenant_id: str = ""
+    loki_retention_job: str = "lt_oosaka-retention"
+    loki_timeout_seconds: float = 5.0
 
 
 settings = Settings()

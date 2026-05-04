@@ -50,99 +50,141 @@ async def test_verify_signature_rejects_invalid_signature(monkeypatch):
     assert exc.value.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_github_webhook_enqueues_review_comment_via_celery(monkeypatch, caplog):
-    async def fake_verify_signature(request):
-        return json.dumps(
-            {
-                "action": "created",
-                "pull_request": {"merged": True, "number": 42},
-                "repository": {"full_name": "alice/repo"},
-            }
-        ).encode("utf-8")
-
-    from app.routers.webhook import github_webhook
+def test_process_github_webhook_enqueues_review_comment_via_celery(caplog):
+    from app.services.webhook import build_webhook_correlation_id, process_github_webhook
 
     delay_mock = MagicMock()
-    request = FakeRequest(b"", {"X-GitHub-Event": "pull_request_review_comment"})
-
-    monkeypatch.setattr("app.routers.webhook.verify_signature", fake_verify_signature)
-    monkeypatch.setattr("app.routers.webhook.extract_pr_task.delay", delay_mock)
+    payload = {
+        "action": "created",
+        "pull_request": {"merged": True, "number": 42},
+        "repository": {"full_name": "alice/repo"},
+    }
 
     with caplog.at_level(logging.INFO):
-        response = await github_webhook(request)
+        process_github_webhook(
+            "pull_request_review_comment",
+            payload,
+            enqueue_task=delay_mock,
+        )
 
     delay_mock.assert_called_once()
-    assert response == {"status": "accepted"}
+    assert payload == {
+        "action": "created",
+        "pull_request": {"merged": True, "number": 42},
+        "repository": {"full_name": "alice/repo"},
+    }
+    enqueued_payload = delay_mock.call_args.args[0]
+    expected_correlation_id = build_webhook_correlation_id(
+        "pull_request_review_comment",
+        {
+            "action": "created",
+            "pull_request": {"merged": True, "number": 42},
+            "repository": {"full_name": "alice/repo"},
+        },
+    )
+    assert enqueued_payload["event_type"] == "pull_request_review_comment"
+    assert enqueued_payload["correlation_id"] == expected_correlation_id
     assert any(
-        "Webhook received event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42"
+        f"Webhook received event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
         in record.message
         for record in caplog.records
     )
     assert any(
-        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42"
+        f"Webhook stage=handoff task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
+        f"Webhook enqueued Celery task task=extract_pr_task event_type=pull_request_review_comment action=created repo=alice/repo pr_number=42 installation_id=None correlation_id={expected_correlation_id}"
         in record.message
         for record in caplog.records
     )
 
 
-@pytest.mark.asyncio
-async def test_github_webhook_enqueues_merged_pull_request_via_celery(monkeypatch, caplog):
-    async def fake_verify_signature(request):
-        return json.dumps(
-            {
-                "action": "closed",
-                "pull_request": {"merged": True, "number": 7},
-                "repository": {"full_name": "alice/repo"},
-                "installation": {"id": 99},
-            }
-        ).encode("utf-8")
-
-    from app.routers.webhook import github_webhook
+def test_process_github_webhook_enqueues_merged_pull_request_via_celery(caplog):
+    from app.services.webhook import process_github_webhook
 
     delay_mock = MagicMock()
-    request = FakeRequest(b"", {"X-GitHub-Event": "pull_request"})
-
-    monkeypatch.setattr("app.routers.webhook.verify_signature", fake_verify_signature)
-    monkeypatch.setattr("app.routers.webhook.extract_pr_task.delay", delay_mock)
+    payload = {
+        "action": "closed",
+        "pull_request": {"merged": True, "number": 7},
+        "repository": {"full_name": "alice/repo"},
+        "installation": {"id": 99},
+    }
 
     with caplog.at_level(logging.INFO):
-        response = await github_webhook(request)
+        process_github_webhook(
+            "pull_request",
+            payload,
+            enqueue_task=delay_mock,
+        )
 
     delay_mock.assert_called_once()
-    assert response == {"status": "accepted"}
+    assert delay_mock.call_args.args[0]["correlation_id"] == "github-webhook:pull_request:closed:alice/repo:7:99"
     assert any(
-        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7"
+        "Webhook stage=handoff task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7 installation_id=99 correlation_id=github-webhook:pull_request:closed:alice/repo:7:99"
+        in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "Webhook enqueued Celery task task=extract_pr_task event_type=pull_request action=closed repo=alice/repo pr_number=7 installation_id=99 correlation_id=github-webhook:pull_request:closed:alice/repo:7:99"
         in record.message
         for record in caplog.records
     )
 
 
-@pytest.mark.asyncio
-async def test_github_webhook_does_not_enqueue_irrelevant_event(monkeypatch, caplog):
-    async def fake_verify_signature(request):
-        return json.dumps(
-            {
-                "action": "opened",
-                "pull_request": {"merged": False},
-                "repository": {"full_name": "alice/repo"},
-            }
-        ).encode("utf-8")
-
-    from app.routers.webhook import github_webhook
+def test_process_github_webhook_does_not_enqueue_irrelevant_event(caplog):
+    from app.services.webhook import process_github_webhook
 
     delay_mock = MagicMock()
-    request = FakeRequest(b"", {"X-GitHub-Event": "issues"})
-
-    monkeypatch.setattr("app.routers.webhook.verify_signature", fake_verify_signature)
-    monkeypatch.setattr("app.routers.webhook.extract_pr_task.delay", delay_mock)
+    payload = {
+        "action": "opened",
+        "pull_request": {"merged": False},
+        "repository": {"full_name": "alice/repo"},
+    }
 
     with caplog.at_level(logging.INFO):
-        response = await github_webhook(request)
+        process_github_webhook("issues", payload, enqueue_task=delay_mock)
 
     delay_mock.assert_not_called()
-    assert response == {"status": "accepted"}
     assert any(
-        "Webhook ignored event_type=issues action=opened repo=alice/repo pr_number=None" in record.message
+        "Webhook ignored event_type=issues action=opened repo=alice/repo pr_number=None installation_id=None correlation_id=github-webhook:issues:opened:alice/repo:na:na"
+        in record.message
         for record in caplog.records
     )
+
+
+def test_prepare_webhook_task_payload_sets_context_without_mutating_input():
+    from app.services.webhook import prepare_webhook_task_payload
+
+    payload = {
+        "action": "created",
+        "pull_request": {"merged": True, "number": 42},
+        "repository": {"full_name": "alice/repo"},
+    }
+
+    prepared = prepare_webhook_task_payload("pull_request_review_comment", payload)
+
+    assert "event_type" not in payload
+    assert "correlation_id" not in payload
+    assert prepared["event_type"] == "pull_request_review_comment"
+    assert prepared["correlation_id"] == "github-webhook:pull_request_review_comment:created:alice/repo:42:na"
+
+
+@pytest.mark.asyncio
+async def test_github_webhook_delegates_to_service(monkeypatch):
+    async def fake_verify_signature(request):
+        return json.dumps({"action": "opened"}).encode("utf-8")
+
+    from app.routers import webhook as routes
+
+    process_mock = MagicMock()
+    request = FakeRequest(b"", {"X-GitHub-Event": "issues"})
+
+    monkeypatch.setattr(routes, "verify_signature", fake_verify_signature)
+    monkeypatch.setattr(routes, "process_github_webhook", process_mock)
+
+    response = await routes.github_webhook(request)
+
+    process_mock.assert_called_once_with("issues", {"action": "opened"})
+    assert response == {"status": "accepted"}

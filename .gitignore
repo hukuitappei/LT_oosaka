@@ -16,3 +16,5 @@ LOG/
 *.skill
 _skill_work/
 local-skills/
+.claude/
+zentou-ai-checker.skill

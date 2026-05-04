@@ -82,3 +82,16 @@ async def require_workspace_role(
     if member is None or member.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return member
+
+
+async def get_current_workspace_member(
+    current_user: User = Depends(get_current_user),
+    current_workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceMember:
+    return await require_workspace_role(
+        {"owner", "admin", "member"},
+        current_user=current_user,
+        current_workspace=current_workspace,
+        db=db,
+    )

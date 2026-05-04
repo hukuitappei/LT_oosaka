@@ -7,8 +7,14 @@ async def test_save_learning_items_creates_records(sample_llm_output):
     from app.services.learning_saver import save_learning_items
 
     mock_db = AsyncMock()
-    mock_pr = MagicMock(repository_id=123, processed=False)
-    mock_repo = MagicMock(workspace_id=456)
+    mock_pr = MagicMock(
+        repository_id=123,
+        processed=False,
+        github_pr_number=42,
+        title="Improve validation",
+        github_url="https://example.com/pr/42",
+    )
+    mock_repo = MagicMock(workspace_id=456, full_name="owner/repo", name="repo")
     mock_db.get = AsyncMock(side_effect=[mock_pr, mock_repo])
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
@@ -27,8 +33,14 @@ async def test_save_learning_items_sets_schema_version(sample_llm_output):
     from app.services.learning_saver import save_learning_items
 
     mock_db = AsyncMock()
-    mock_pr = MagicMock(repository_id=123, processed=False)
-    mock_repo = MagicMock(workspace_id=456)
+    mock_pr = MagicMock(
+        repository_id=123,
+        processed=False,
+        github_pr_number=42,
+        title="Improve validation",
+        github_url="https://example.com/pr/42",
+    )
+    mock_repo = MagicMock(workspace_id=456, full_name="owner/repo", name="repo")
     mock_db.get = AsyncMock(side_effect=[mock_pr, mock_repo])
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
@@ -47,8 +59,14 @@ async def test_save_learning_items_returns_list(sample_llm_output):
     from app.services.learning_saver import save_learning_items
 
     mock_db = AsyncMock()
-    mock_pr = MagicMock(repository_id=123, processed=False)
-    mock_repo = MagicMock(workspace_id=456)
+    mock_pr = MagicMock(
+        repository_id=123,
+        processed=False,
+        github_pr_number=42,
+        title="Improve validation",
+        github_url="https://example.com/pr/42",
+    )
+    mock_repo = MagicMock(workspace_id=456, full_name="owner/repo", name="repo")
     mock_db.get = AsyncMock(side_effect=[mock_pr, mock_repo])
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
@@ -65,8 +83,14 @@ async def test_save_learning_items_marks_pr_processed(sample_llm_output):
     from app.services.learning_saver import save_learning_items
 
     mock_db = AsyncMock()
-    mock_pr = MagicMock(repository_id=123, processed=False)
-    mock_repo = MagicMock(workspace_id=456)
+    mock_pr = MagicMock(
+        repository_id=123,
+        processed=False,
+        github_pr_number=42,
+        title="Improve validation",
+        github_url="https://example.com/pr/42",
+    )
+    mock_repo = MagicMock(workspace_id=456, full_name="owner/repo", name="repo")
     mock_db.get = AsyncMock(side_effect=[mock_pr, mock_repo])
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
@@ -98,8 +122,14 @@ async def test_save_learning_items_item_fields(sample_llm_output):
     from app.services.learning_saver import save_learning_items
 
     mock_db = AsyncMock()
-    mock_pr = MagicMock(repository_id=123, processed=False)
-    mock_repo = MagicMock(workspace_id=456)
+    mock_pr = MagicMock(
+        repository_id=123,
+        processed=False,
+        github_pr_number=42,
+        title="Improve validation",
+        github_url="https://example.com/pr/42",
+    )
+    mock_repo = MagicMock(workspace_id=456, full_name="owner/repo", name="repo")
     mock_db.get = AsyncMock(side_effect=[mock_pr, mock_repo])
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
@@ -118,3 +148,8 @@ async def test_save_learning_items_item_fields(sample_llm_output):
     assert item.action_for_next_time == llm_item.action_for_next_time
     assert item.evidence == llm_item.evidence
     assert item.pull_request_id == 1
+    assert item.source_repository_full_name == mock_repo.full_name
+    assert item.source_repository_name == mock_repo.name
+    assert item.source_github_pr_number == mock_pr.github_pr_number
+    assert item.source_pr_title == mock_pr.title
+    assert item.source_pr_github_url == mock_pr.github_url

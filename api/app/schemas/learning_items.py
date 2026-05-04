@@ -27,7 +27,7 @@ class PullRequestRef(BaseModel):
 
 class LearningItemResponse(BaseModel):
     id: int
-    pull_request_id: int
+    pull_request_id: int | None
     title: str
     detail: str
     category: str
@@ -37,8 +37,8 @@ class LearningItemResponse(BaseModel):
     status: LearningItemStatus
     visibility: str
     created_at: datetime
-    repository: RepositoryRef
-    pull_request: PullRequestRef
+    repository: RepositoryRef | None
+    pull_request: PullRequestRef | None
 
     model_config = {"from_attributes": True}
 

@@ -184,9 +184,14 @@ class LearningItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id"))
+    pull_request_id: Mapped[int | None] = mapped_column(ForeignKey("pull_requests.id"), nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="new")
+    source_repository_full_name: Mapped[str] = mapped_column(String(255), default="")
+    source_repository_name: Mapped[str] = mapped_column(String(255), default="")
+    source_github_pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_pr_title: Mapped[str] = mapped_column(String(500), default="")
+    source_pr_github_url: Mapped[str] = mapped_column(String(500), default="")
     visibility: Mapped[str] = mapped_column(String(32), default="private_draft")
     schema_version: Mapped[str] = mapped_column(String(10), default="1.0")
     title: Mapped[str] = mapped_column(String(255))
@@ -199,7 +204,7 @@ class LearningItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="learning_items")
-    pull_request: Mapped["PullRequest"] = relationship(back_populates="learning_items")
+    pull_request: Mapped["PullRequest | None"] = relationship(back_populates="learning_items")
     created_by_user: Mapped["User | None"] = relationship(
         back_populates="created_learning_items",
         foreign_keys=[created_by_user_id],

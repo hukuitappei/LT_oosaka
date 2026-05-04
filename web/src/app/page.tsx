@@ -69,6 +69,13 @@ export default async function Home() {
               >
                 Weekly Digests
               </Link>
+              <Link
+                href="/github-connections"
+                prefetch={false}
+                className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+              >
+                GitHub 接続
+              </Link>
             </div>
           </div>
 

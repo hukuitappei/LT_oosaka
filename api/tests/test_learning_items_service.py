@@ -80,10 +80,7 @@ async def test_list_workspace_learning_items_applies_filters(db_session):
 @pytest.mark.asyncio
 async def test_get_workspace_learning_item_requires_workspace_scope(db_session):
     from app.db.models import LearningItem, PullRequest, Repository, Workspace
-    from app.services.learning_items import (
-        LearningItemNotFoundError,
-        get_workspace_learning_item,
-    )
+    from app.services.learning_items import LearningItemNotFoundError, get_workspace_learning_item
 
     workspace = Workspace(name="Alpha", slug="alpha", is_personal=True)
     db_session.add(workspace)
@@ -229,33 +226,33 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
     )
 
     first_item = LearningItem(
-                    workspace_id=workspace.id,
-                    pull_request_id=first_pr.id,
-                    schema_version="1.0",
-                    title="Validate payload before persistence",
-                    detail="detail",
-                    category="design",
-                    confidence=0.9,
-                    action_for_next_time="Add payload validation",
-                    evidence="Reviewer asked for payload validation",
-                    status="new",
-                    visibility="workspace_shared",
-                    created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
-                )
+        workspace_id=workspace.id,
+        pull_request_id=first_pr.id,
+        schema_version="1.0",
+        title="Validate payload before persistence",
+        detail="detail",
+        category="design",
+        confidence=0.9,
+        action_for_next_time="Add payload validation",
+        evidence="Reviewer asked for payload validation",
+        status="new",
+        visibility="workspace_shared",
+        created_at=datetime(2026, 3, 18, tzinfo=timezone.utc),
+    )
     second_item = LearningItem(
-                workspace_id=workspace.id,
-                pull_request_id=second_pr.id,
-                schema_version="1.0",
-                title="Testing item",
-                detail="detail",
-                category="testing",
-                confidence=0.8,
-                action_for_next_time="act",
-                evidence="evidence",
-                status="in_progress",
-                visibility="workspace_shared",
-                created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
-            )
+        workspace_id=workspace.id,
+        pull_request_id=second_pr.id,
+        schema_version="1.0",
+        title="Testing item",
+        detail="detail",
+        category="testing",
+        confidence=0.8,
+        action_for_next_time="act",
+        evidence="evidence",
+        status="in_progress",
+        visibility="workspace_shared",
+        created_at=datetime(2026, 3, 25, tzinfo=timezone.utc),
+    )
     db_session.add_all([first_item, second_item])
     await db_session.flush()
     db_session.add_all(
@@ -300,3 +297,44 @@ async def test_summarize_workspace_learning_items_returns_weekly_points(db_sessi
         ("applied", 0),
         ("ignored", 0),
     }
+
+
+@pytest.mark.asyncio
+async def test_list_workspace_learning_items_uses_snapshot_when_pull_request_is_missing(db_session):
+    from app.db.models import LearningItem, Workspace
+    from app.services.learning_items import list_workspace_learning_items
+
+    workspace = Workspace(name="Alpha", slug="alpha-orphan", is_personal=True)
+    db_session.add(workspace)
+    await db_session.flush()
+
+    db_session.add(
+        LearningItem(
+            workspace_id=workspace.id,
+            pull_request_id=None,
+            schema_version="1.0",
+            title="Retained learning",
+            detail="This should survive source PR deletion.",
+            category="design",
+            confidence=0.9,
+            action_for_next_time="Preserve source snapshots.",
+            evidence="Retention test.",
+            visibility="workspace_shared",
+            source_repository_full_name="owner/repo",
+            source_repository_name="repo",
+            source_github_pr_number=42,
+            source_pr_title="Improve validation",
+            source_pr_github_url="https://example.com/pr/42",
+            created_at=datetime(2026, 3, 3, tzinfo=timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    items = await list_workspace_learning_items(db_session, workspace.id)
+
+    assert [item.title for item in items] == ["Retained learning"]
+    assert items[0].pull_request_id is None
+    assert items[0].repository is not None
+    assert items[0].repository.full_name == "owner/repo"
+    assert items[0].pull_request is not None
+    assert items[0].pull_request.github_pr_number == 42

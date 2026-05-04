@@ -1,12 +1,10 @@
 import { getClientRequestHeaders, getToken } from "@/lib/auth"
 
-const API_URL = process.env.API_URL || "http://localhost:8000"
-
 export type LearningItemStatus = "new" | "in_progress" | "applied" | "ignored"
 
 export interface LearningItem {
   id: number
-  pull_request_id: number
+  pull_request_id: number | null
   title: string
   detail: string
   category: string
@@ -83,6 +81,18 @@ export interface Repository {
   github_id: number
   full_name: string
   name: string
+  created_at: string
+}
+
+export interface GitHubConnection {
+  id: number
+  provider_type: string
+  workspace_id: number | null
+  user_id: number | null
+  installation_id: number | null
+  github_account_login: string | null
+  label: string | null
+  is_active: boolean
   created_at: string
 }
 
@@ -172,17 +182,38 @@ export interface SpaceSettings {
 
 type QueryValue = string | number | boolean | null | undefined
 
-export interface ApiRequestOptions {
+export interface ApiFetchOptions {
   token?: string
   headers?: HeadersInit
+  throwOnError?: boolean
+}
+
+export interface ApiRequestOptions extends ApiFetchOptions {
   query?: Record<string, QueryValue>
   method?: string
-  body?: BodyInit | null
+  body?: BodyInit | FormData | string | object | null
 }
 
 export interface UpdateLearningItemInput {
   status?: LearningItemStatus
   visibility?: string
+}
+
+export class ApiRequestError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiRequestError"
+    this.status = status
+  }
+}
+
+function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "/api/backend"
+  }
+  return process.env.API_URL || "http://localhost:8000"
 }
 
 function toHeaders(input?: HeadersInit): Headers {
@@ -214,15 +245,17 @@ function toHeaders(input?: HeadersInit): Headers {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = new URL(path, API_URL)
-  if (!query) return url.toString()
+  const url = new URL(`${getApiBaseUrl()}${path}`, "http://local")
+  if (!query) {
+    return url.pathname + url.search
+  }
 
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue
     url.searchParams.set(key, String(value))
   }
 
-  return url.toString()
+  return url.pathname + url.search
 }
 
 async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T | null> {
@@ -245,22 +278,49 @@ async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Pro
   }
 
   try {
+    const hasBody = options.body !== undefined && options.body !== null
+    if (hasBody && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json")
+    }
+
+    const body =
+      !hasBody
+        ? undefined
+        : typeof options.body === "string" ||
+            options.body instanceof FormData ||
+            options.body instanceof URLSearchParams
+          ? options.body
+          : JSON.stringify(options.body)
+
     const res = await fetch(buildUrl(path, options.query), {
       method: options.method ?? "GET",
       cache: "no-store",
       headers,
-      body: options.body ?? null,
+      body,
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      if (!options.throwOnError) return null
+      const error = await res.json().catch(() => null)
+      throw new ApiRequestError(error?.detail ?? `Request failed with status ${res.status}`, res.status)
+    }
+    if (res.status === 204) return null
     return res.json()
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) {
+      if (error instanceof Error) throw error
+      throw new ApiRequestError("Network request failed", 0)
+    }
     return null
   }
 }
 
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
+  return apiRequest<T>(path, options)
+}
+
 export async function login(email: string, password: string): Promise<TokenResponse> {
   const form = new URLSearchParams({ username: email, password })
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString(),
@@ -273,7 +333,7 @@ export async function login(email: string, password: string): Promise<TokenRespo
 }
 
 export async function register(email: string, password: string): Promise<TokenResponse> {
-  const res = await fetch(`${API_URL}/auth/register`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -302,32 +362,66 @@ export const api = {
   ) => apiRequest<LearningItem[]>("/learning-items/", options),
   getLearningItemsSummary: (options?: ApiRequestOptions & { query?: { weeks?: number } }) =>
     apiRequest<LearningItemsSummary>("/learning-items/summary", options),
-  updateLearningItem: (id: number, input: UpdateLearningItemInput, options?: ApiRequestOptions) =>
+  updateLearningItem: (id: number, input: UpdateLearningItemInput, options?: ApiFetchOptions) =>
     apiRequest<LearningItem>(`/learning-items/${id}`, {
       ...options,
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...(options?.headers ?? {}),
-      },
-      body: JSON.stringify(input),
+      body: input,
     }),
-  getWeeklyDigests: (options?: ApiRequestOptions) =>
-    apiRequest<WeeklyDigest[]>("/weekly-digests/", options),
-  getWeeklyDigest: (id: number, options?: ApiRequestOptions) =>
-    apiRequest<WeeklyDigest>(`/weekly-digests/${id}`, options),
-  getCurrentUserProfile: (options?: ApiRequestOptions) => apiRequest<UserProfile>("/auth/me", options),
-  getSpaces: (options?: ApiRequestOptions) => apiRequest<SpaceSummary[]>("/spaces/", options),
-  getCurrentSpace: (options?: ApiRequestOptions) => apiRequest<SpaceContext>("/spaces/current/context", options),
-  getSpaceSettings: (id: number, options?: ApiRequestOptions) =>
-    apiRequest<SpaceSettings>(`/spaces/${id}/settings`, options),
-  getPullRequest: (id: number, options?: ApiRequestOptions) =>
-    apiRequest<PullRequestDetail>(`/pull-requests/${id}`, options),
-  recordRelatedLearningReuse: (prId: number, itemId: number, options?: ApiRequestOptions) =>
+  getWeeklyDigests: (options?: ApiFetchOptions) =>
+    apiFetch<WeeklyDigest[]>("/weekly-digests/", options),
+  getWeeklyDigest: (id: number, options?: ApiFetchOptions) =>
+    apiFetch<WeeklyDigest>(`/weekly-digests/${id}`, options),
+  getCurrentUserProfile: (options?: ApiFetchOptions) => apiFetch<UserProfile>("/auth/me", options),
+  getSpaces: (options?: ApiFetchOptions) => apiFetch<SpaceSummary[]>("/spaces/", options),
+  getCurrentSpace: (options?: ApiFetchOptions) => apiFetch<SpaceContext>("/spaces/current/context", options),
+  getSpaceSettings: (id: number, options?: ApiFetchOptions) =>
+    apiFetch<SpaceSettings>(`/spaces/${id}/settings`, options),
+  getPullRequest: (id: number, options?: ApiFetchOptions) =>
+    apiFetch<PullRequestDetail>(`/pull-requests/${id}`, options),
+  recordRelatedLearningReuse: (prId: number, itemId: number, options?: ApiFetchOptions) =>
     apiRequest<LearningReuseRecord>(`/pull-requests/${prId}/related-learning/${itemId}/reuse`, {
       ...options,
       method: "POST",
     }),
-  getRepositories: (options?: ApiRequestOptions) =>
-    apiRequest<Repository[]>("/repositories/", options),
+  getRepositories: (options?: ApiFetchOptions) =>
+    apiFetch<Repository[]>("/repositories/", options),
+  getGitHubConnections: (options?: ApiFetchOptions) =>
+    apiFetch<GitHubConnection[]>("/github-connections/", options),
+  createTokenGitHubConnection: (
+    payload: {
+      access_token: string
+      github_account_login?: string | null
+      label?: string | null
+      workspace_id?: number | null
+    },
+    options?: ApiFetchOptions,
+  ) =>
+    apiRequest<GitHubConnection>("/github-connections/token", {
+      ...options,
+      throwOnError: options?.throwOnError ?? true,
+      method: "POST",
+      body: payload,
+    }),
+  linkAppGitHubConnection: (
+    payload: {
+      installation_id: number
+      github_account_login?: string | null
+      label?: string | null
+      workspace_id?: number | null
+    },
+    options?: ApiFetchOptions,
+  ) =>
+    apiRequest<GitHubConnection>("/github-connections/app/link", {
+      ...options,
+      throwOnError: options?.throwOnError ?? true,
+      method: "POST",
+      body: payload,
+    }),
+  deleteGitHubConnection: (connectionId: number, options?: ApiFetchOptions) =>
+    apiRequest<{ status: string }>(`/github-connections/${connectionId}`, {
+      ...options,
+      throwOnError: options?.throwOnError ?? true,
+      method: "DELETE",
+    }),
 }

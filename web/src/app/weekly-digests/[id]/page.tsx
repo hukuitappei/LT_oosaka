@@ -17,9 +17,13 @@ export default async function WeeklyDigestDetailPage({
   if (!digest) notFound()
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
+    <main className="mx-auto min-h-screen max-w-4xl px-6 py-10" data-testid="weekly-digest-detail">
       <div className="mb-6 flex items-center gap-4">
-        <Link href="/weekly-digests" className="text-sm text-stone-400 hover:text-stone-200">
+        <Link
+          href="/weekly-digests"
+          className="text-sm text-stone-400 hover:text-stone-200"
+          data-testid="weekly-digest-back-link"
+        >
           Weekly Digests
         </Link>
         <h1 className="text-2xl font-semibold text-white">
@@ -36,13 +40,19 @@ export default async function WeeklyDigestDetailPage({
         <span>Clean reuses {digest.clean_reuse_event_count}</span>
       </div>
 
-      <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <section
+        className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+        data-testid="weekly-digest-summary"
+      >
         <h2 className="mb-3 font-semibold text-white">Summary</h2>
         <p className="leading-7 text-stone-300">{digest.summary}</p>
       </section>
 
       {digest.repeated_issues.length > 0 ? (
-        <section className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <section
+          className="mb-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+          data-testid="weekly-digest-repeated-issues"
+        >
           <h2 className="mb-3 font-semibold text-white">Repeated Issues</h2>
           <ul className="space-y-1">
             {digest.repeated_issues.map((issue, index) => (
@@ -56,7 +66,10 @@ export default async function WeeklyDigestDetailPage({
       ) : null}
 
       {digest.next_time_notes.length > 0 ? (
-        <section className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <section
+          className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur"
+          data-testid="weekly-digest-next-time-notes"
+        >
           <h2 className="mb-3 font-semibold text-white">Next Time Notes</h2>
           <ul className="space-y-1">
             {digest.next_time_notes.map((note, index) => (

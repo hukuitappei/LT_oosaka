@@ -1,7 +1,7 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { api, type SpaceSummary } from "@/lib/api"
 import { getSpaceId, getUserEmail, isAuthenticated, removeSpaceId, removeToken, setSpaceId } from "@/lib/auth"
@@ -67,6 +67,13 @@ export default function NavBar() {
               <Link href="/weekly-digests" className="text-sm text-stone-300 transition-colors hover:text-white">
                 Weekly Digests
               </Link>
+              <Link
+                href="/github-connections"
+                prefetch={false}
+                className="text-sm text-stone-300 transition-colors hover:text-white"
+              >
+                GitHub Connections
+              </Link>
               <Link href="/learning-items" className="text-sm text-stone-300 transition-colors hover:text-white">
                 Learning Items
               </Link>
@@ -93,6 +100,7 @@ export default function NavBar() {
             ) : null}
             {email ? <span className="text-sm text-stone-500">{email}</span> : null}
             <button
+              data-testid="logout-button"
               onClick={handleLogout}
               className="text-sm text-stone-400 transition-colors hover:text-red-300"
             >

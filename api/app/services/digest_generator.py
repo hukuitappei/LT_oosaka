@@ -97,6 +97,14 @@ def _build_digest_prompt(
     return "\n".join(lines)
 
 
+def _digest_pr_identity(item: LearningItem) -> str | int | None:
+    if item.pull_request_id is not None:
+        return item.pull_request_id
+    if item.source_repository_full_name and item.source_github_pr_number is not None:
+        return f"{item.source_repository_full_name}#{item.source_github_pr_number}"
+    return None
+
+
 async def generate_weekly_digest(
     year: int,
     week: int,
@@ -168,7 +176,7 @@ async def generate_weekly_digest(
         existing.summary = summary
         existing.repeated_issues = repeated_issues
         existing.next_time_notes = next_time_notes
-        existing.pr_count = len(set(i.pull_request_id for i in items))
+        existing.pr_count = len({identity for identity in (_digest_pr_identity(i) for i in items) if identity is not None})
         existing.learning_count = len(items)
         digest = existing
     else:
@@ -180,7 +188,7 @@ async def generate_weekly_digest(
             summary=summary,
             repeated_issues=repeated_issues,
             next_time_notes=next_time_notes,
-            pr_count=len(set(i.pull_request_id for i in items)),
+            pr_count=len({identity for identity in (_digest_pr_identity(i) for i in items) if identity is not None}),
             learning_count=len(items),
         )
         db.add(digest)

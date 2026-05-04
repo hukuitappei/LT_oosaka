@@ -4,9 +4,7 @@ import { api, type LearningItemStatus } from "@/lib/api"
 import { CATEGORY_LABELS, LEARNING_STATUS_LABELS } from "@/lib/learning-item-labels"
 import { getRequestContextHeaders } from "@/lib/request-context"
 
-function readSearchParam(
-  value: string | string[] | undefined,
-): string {
+function readSearchParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? ""
   return value ?? ""
 }
@@ -50,9 +48,7 @@ export default async function LearningItemsPage({
     api.getRepositories({ headers: requestHeaders }),
   ])
 
-  const statusCounts = Object.fromEntries(
-    (summary?.status_counts ?? []).map((row) => [row.status, row.count]),
-  )
+  const statusCounts = Object.fromEntries((summary?.status_counts ?? []).map((row) => [row.status, row.count]))
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-10">
@@ -133,7 +129,13 @@ export default async function LearningItemsPage({
         </form>
       </section>
 
-      <LearningItemsBoard initialItems={items ?? []} />
+      {!items || items.length === 0 ? (
+        <p className="text-stone-400" data-testid="learning-items-empty-state">
+          学びはまだありません。
+        </p>
+      ) : (
+        <LearningItemsBoard initialItems={items} />
+      )}
     </main>
   )
 }

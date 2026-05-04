@@ -4,13 +4,19 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
 const children = []
 let shuttingDown = false
 
-function startProcess(command, extraEnv = {}) {
-  const child = spawn(command, {
-    cwd: process.cwd(),
-    env: { ...process.env, ...extraEnv },
-    stdio: "inherit",
-    shell: true,
-  })
+function startProcess(args, extraEnv = {}) {
+  const child =
+    process.platform === "win32"
+      ? spawn("cmd.exe", ["/c", npmCommand, ...args], {
+          cwd: process.cwd(),
+          env: { ...process.env, ...extraEnv },
+          stdio: "inherit",
+        })
+      : spawn(npmCommand, args, {
+          cwd: process.cwd(),
+          env: { ...process.env, ...extraEnv },
+          stdio: "inherit",
+        })
 
   child.on("exit", (code, signal) => {
     if (shuttingDown) {
@@ -29,9 +35,9 @@ function startProcess(command, extraEnv = {}) {
   return child
 }
 
-startProcess(`${npmCommand} run mock-api:e2e`)
-startProcess(`${npmCommand} run start:e2e`, {
-  API_URL: process.env.API_URL || "http://127.0.0.1:4100",
+startProcess(["run", "mock-api:e2e"])
+startProcess(["run", "start:e2e"], {
+  API_URL: process.env.API_URL || "http://localhost:4100",
 })
 
 function shutdown() {

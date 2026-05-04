@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Workspace, User
+from app.db.models import Workspace, User, WorkspaceMember
 from app.db.session import get_db
-from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.dependencies import get_current_user, get_current_workspace, get_current_workspace_member
 from app.schemas.repositories import PullRequestResponse, RepositoryResponse
 from app.services.repositories import (
     RepositoryNotFoundError,
@@ -21,13 +21,8 @@ async def list_repositories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     return await list_workspace_repositories(db, current_workspace.id)
 
 
@@ -37,13 +32,8 @@ async def list_pull_requests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     try:
         return await list_workspace_repository_pull_requests(db, repo_id, current_workspace.id)
     except RepositoryNotFoundError:

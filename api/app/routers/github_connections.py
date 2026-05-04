@@ -6,18 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import GitHubConnection, User, Workspace
+from app.db.models import User, Workspace
 from app.db.session import get_db
-from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.dependencies import get_current_user, get_current_workspace
 from app.services.github_connections import (
     GitHubConnectionNotFoundError,
-    create_token_github_connection,
-    delete_accessible_github_connection,
-    link_app_github_connection,
-    list_user_github_connections,
-    resolve_workspace_for_connection,
+    GitHubConnectionWorkspaceDeletePermissionError,
+    GitHubConnectionWorkspaceNotFoundError,
+    GitHubConnectionWorkspacePermissionError,
+    create_token_github_connection_for_workspace_context,
+    delete_visible_github_connection,
+    link_app_github_connection_for_workspace_context,
+    list_visible_github_connections,
 )
-from app.services.workspaces import WorkspaceNotFoundError
 
 router = APIRouter(prefix="/github-connections", tags=["github-connections"])
 
@@ -50,39 +51,16 @@ class AppConnectionRequest(BaseModel):
     workspace_id: int | None = None
 
 
-async def _resolve_workspace(
-    workspace_id: int | None,
-    current_workspace: Workspace,
-    current_user: User,
-    db: AsyncSession,
-) -> Workspace:
-    try:
-        workspace = await resolve_workspace_for_connection(
-            db,
-            workspace_id=workspace_id,
-            fallback_workspace_id=current_workspace.id,
-        )
-    except WorkspaceNotFoundError:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=workspace,
-        db=db,
-    )
-    return workspace
-
-
 @router.get("/", response_model=list[GitHubConnectionOut])
 async def list_connections(
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    return await list_user_github_connections(
+    return await list_visible_github_connections(
         db,
-        current_user_id=current_user.id,
-        current_workspace_id=current_workspace.id,
+        workspace_id=current_workspace.id,
+        user_id=current_user.id,
     )
 
 
@@ -93,15 +71,20 @@ async def create_token_connection(
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await _resolve_workspace(request.workspace_id, current_workspace, current_user, db)
-    return await create_token_github_connection(
-        db,
-        workspace_id=workspace.id,
-        user_id=current_user.id,
-        access_token=request.access_token,
-        github_account_login=request.github_account_login,
-        label=request.label,
-    )
+    try:
+        return await create_token_github_connection_for_workspace_context(
+            db,
+            requested_workspace_id=request.workspace_id,
+            current_workspace_id=current_workspace.id,
+            user_id=current_user.id,
+            access_token=request.access_token,
+            github_account_login=request.github_account_login,
+            label=request.label,
+        )
+    except GitHubConnectionWorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except GitHubConnectionWorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
 
 
 @router.post("/app/link", response_model=GitHubConnectionOut, status_code=status.HTTP_201_CREATED)
@@ -111,15 +94,20 @@ async def link_app_connection(
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    workspace = await _resolve_workspace(request.workspace_id, current_workspace, current_user, db)
-    return await link_app_github_connection(
-        db,
-        workspace_id=workspace.id,
-        user_id=current_user.id,
-        installation_id=request.installation_id,
-        github_account_login=request.github_account_login,
-        label=request.label,
-    )
+    try:
+        return await link_app_github_connection_for_workspace_context(
+            db,
+            requested_workspace_id=request.workspace_id,
+            current_workspace_id=current_workspace.id,
+            user_id=current_user.id,
+            installation_id=request.installation_id,
+            github_account_login=request.github_account_login,
+            label=request.label,
+        )
+    except GitHubConnectionWorkspaceNotFoundError:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    except GitHubConnectionWorkspacePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
 
 
 @router.delete("/{connection_id}")
@@ -129,23 +117,15 @@ async def delete_connection(
     current_workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ):
-    connection = await db.get(GitHubConnection, connection_id)
-    if connection is None:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    if connection.workspace_id is not None:
-        await require_workspace_role(
-            {"owner", "admin"},
-            current_user=current_user,
-            current_workspace=current_workspace,
-            db=db,
-        )
     try:
-        await delete_accessible_github_connection(
+        await delete_visible_github_connection(
             db,
             connection_id=connection_id,
-            current_user_id=current_user.id,
-            current_workspace_id=current_workspace.id,
+            workspace_id=current_workspace.id,
+            user_id=current_user.id,
         )
     except GitHubConnectionNotFoundError:
         raise HTTPException(status_code=404, detail="Connection not found")
+    except GitHubConnectionWorkspaceDeletePermissionError:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permissions")
     return {"status": "deleted"}

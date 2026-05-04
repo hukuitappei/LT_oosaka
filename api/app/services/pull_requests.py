@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import LearningItem, LearningReuseEvent, PullRequest, Repository
+from app.schemas.handoffs import ReanalysisRequest
 from app.services.related_learning_recommendations import (
     RelatedLearningItemMatch,
     recommend_related_learning_items,
@@ -110,7 +111,8 @@ async def request_reanalysis_for_pull_request(
 
     from app.tasks.extract import reanalyze_pr_task
 
-    reanalyze_pr_task.delay(pr.id, workspace_id, user_id)
+    request = ReanalysisRequest(pr_id=pr.id, workspace_id=workspace_id, user_id=user_id)
+    reanalyze_pr_task.delay(request.model_dump(mode="python"))
     logger.info(
         "request_reanalysis_for_pull_request enqueued pr_id=%d workspace_id=%d user_id=%d",
         pr.id,

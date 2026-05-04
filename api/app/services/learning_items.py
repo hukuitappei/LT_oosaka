@@ -45,8 +45,8 @@ def _week_sequence(*, today: date, weeks: int) -> list[LearningWeek]:
 def _learning_items_query(workspace_id: int):
     return (
         select(LearningItem)
-        .join(PullRequest, LearningItem.pull_request_id == PullRequest.id)
-        .join(Repository, PullRequest.repository_id == Repository.id)
+        .outerjoin(PullRequest, LearningItem.pull_request_id == PullRequest.id)
+        .outerjoin(Repository, PullRequest.repository_id == Repository.id)
         .options(
             selectinload(LearningItem.pull_request).selectinload(PullRequest.repository)
         )
@@ -56,7 +56,27 @@ def _learning_items_query(workspace_id: int):
 
 def to_learning_item_response(item: LearningItem) -> LearningItemResponse:
     pull_request = item.pull_request
-    repository = pull_request.repository
+    repository = pull_request.repository if pull_request else None
+    repository_ref = None
+    pull_request_ref = None
+    if repository is not None:
+        repository_ref = RepositoryRef.model_validate(repository)
+    elif item.source_repository_full_name:
+        repository_ref = RepositoryRef(
+            id=0,
+            full_name=item.source_repository_full_name,
+            name=item.source_repository_name,
+        )
+
+    if pull_request is not None:
+        pull_request_ref = PullRequestRef.model_validate(pull_request)
+    elif item.source_github_pr_number is not None:
+        pull_request_ref = PullRequestRef(
+            id=0,
+            github_pr_number=item.source_github_pr_number,
+            title=item.source_pr_title,
+            github_url=item.source_pr_github_url,
+        )
     return LearningItemResponse(
         id=item.id,
         pull_request_id=item.pull_request_id,
@@ -69,8 +89,8 @@ def to_learning_item_response(item: LearningItem) -> LearningItemResponse:
         status=item.status,
         visibility=item.visibility,
         created_at=item.created_at,
-        repository=RepositoryRef.model_validate(repository),
-        pull_request=PullRequestRef.model_validate(pull_request),
+        repository=repository_ref,
+        pull_request=pull_request_ref,
     )
 
 

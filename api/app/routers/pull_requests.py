@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User, Workspace
+from app.db.models import User, Workspace, WorkspaceMember
 from app.db.session import get_db
-from app.dependencies import get_current_user, get_current_workspace, require_workspace_role
+from app.dependencies import get_current_user, get_current_workspace, get_current_workspace_member, require_workspace_role
 from app.services.pull_requests import (
     PullRequestNotFoundError,
     RelatedLearningItemNotFoundError,
@@ -93,13 +93,8 @@ async def get_pull_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     pr = await get_workspace_pull_request(db, pr_id, current_workspace.id)
     if not pr:
         raise HTTPException(status_code=404, detail="Pull request not found")
@@ -130,13 +125,8 @@ async def reanalyze_pull_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_workspace: Workspace = Depends(get_current_workspace),
+    _member: WorkspaceMember = Depends(get_current_workspace_member),
 ):
-    await require_workspace_role(
-        {"owner", "admin", "member"},
-        current_user=current_user,
-        current_workspace=current_workspace,
-        db=db,
-    )
     try:
         return await request_reanalysis_for_pull_request(
             db,
