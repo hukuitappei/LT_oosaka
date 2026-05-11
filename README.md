@@ -4,6 +4,14 @@ PR Knowledge Hub is a monorepo for turning pull request review feedback into reu
 
 The active application is the `api/` FastAPI backend plus the `web/` Next.js frontend.
 
+## Development Status
+
+Active feature development is closed as of 2026-05-11.
+
+The project is considered complete as a demo-ready MVP / beta implementation. It has enough product surface to demonstrate the core idea: converting pull request review feedback into reusable learning items, weekly digests, and related guidance for later pull requests.
+
+Further work is intentionally deferred until there is a real usage need. Deferred work includes production GitHub OAuth/App verification, live webhook verification, deeper recommendation quality tuning, broader browser E2E coverage, and impact measurement for whether reused learning items reduce repeated review feedback.
+
 ## Current Scope
 
 - Email/password auth with personal workspaces

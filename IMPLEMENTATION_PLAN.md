@@ -2,6 +2,10 @@
 
 ## Status
 
+Active feature development is closed as of 2026-05-11.
+
+The project is considered complete as a demo-ready MVP / beta implementation. The remaining items below are intentionally parked until real usage creates a concrete need for them. This keeps the current project boundary clear: the application demonstrates the intended workflow end to end, while production hardening and deeper recommendation quality work are deferred.
+
 The project is past the initial MVP stage. The current codebase supports:
 
 - authentication and personal workspaces
@@ -120,7 +124,9 @@ Current status: the fixture-backed analysis path is retained as a development/te
 - PR-level related learning suggestions are now part of the intended surface
 - dashboard and PR detail views should continue moving toward "what should we avoid repeating next" rather than passive reporting
 
-## Remaining Work
+## Parked Future Work
+
+These items are not required for the current development close. They should be revisited only if the project is adopted for real use, needs a production deployment, or needs stronger evidence that learning reuse improves review outcomes.
 
 ### High Priority
 
@@ -189,12 +195,21 @@ Expected result:
 - The product can show not only that users interacted with learning items, but that those learnings affected engineering outcomes.
 - This improves practical adoption and gives teams a clearer reason to keep the workflow in place.
 
-## Execution Order
+## Reopen Conditions
 
-1. Finish Priority 1 end-to-end with implementation, review, and test evidence.
+Resume active development only when at least one of these conditions is true:
+
+1. A real user/team wants to try the product against live GitHub repositories.
+2. The project needs to be deployed beyond local/demo use.
+3. Recommendation quality becomes the main blocker to adoption.
+4. The project needs measurable proof that reused learning items reduce repeated review feedback.
+
+When development resumes:
+
+1. Verify GitHub OAuth/App/webhook flows in a real external environment.
 2. Validate recommendation quality against real PR data.
-3. Move to Priority 2 once the recommendation surface is stable.
-4. Add Priority 3 after reuse signals are available in production flows.
+3. Finish the highest-impact recommendation improvement before broadening scope.
+4. Add reuse-impact metrics only after real reuse signals exist.
 
 ### Medium Priority
 
@@ -228,7 +243,9 @@ These items require real external systems or deployment settings and should be t
 
 ## Working Definition of Done
 
-A change is considered done when:
+The current development close is considered done because the application has an end-to-end MVP surface and the remaining work has been explicitly parked.
+
+Future changes are considered done when:
 
 - backend tests pass
 - frontend production build passes
